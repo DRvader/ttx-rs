@@ -134,12 +134,9 @@ impl Telemetry {
 
         // Check if the address is within CSM memory. Otherwise, it must be invalid
         if !(0x10000000..=0x1007FFFF).contains(&telemetry_table_addr)
-            && !(0x10000000..=0x1007FFFF).contains(&telemetry_table_data)
+            || !(0x10000000..=0x1007FFFF).contains(&telemetry_table_data)
         {
-            return Err(TelemetryError::TelemetryNotReady);
-        }
-
-        if telemetry_table_addr == 0 || telemetry_table_data == 0 {
+            println!("{:x} {:x}", telemetry_table_addr, telemetry_table_data);
             return Err(TelemetryError::TelemetryNotReady);
         }
 
@@ -171,7 +168,7 @@ impl Telemetry {
             map.insert(tag, offset);
         }
 
-        self.max_offset = map.values().max().copied().unwrap_or(0) as u64;
+        self.max_offset = map.values().max().copied().map(|v| v + 4).unwrap_or(0) as u64;
         self.entries = map;
 
         Ok(())
