@@ -419,16 +419,16 @@ fn pci_to_tensix_block() {
             //     ever_checked_eq = true;
             //     assert_eq!(
             //         expected, readback,
-            //         "Did not expect to fail to correctly readback with an alignment of {alignment} from 0x{addr:x} with an offset of {offset}"
+            //         "did not expect to fail to correctly readback with an alignment of {alignment} from 0x{addr:x} with an offset of {offset}"
             //     );
             // } else {
             //     ever_checked_ne = true;
             //     if expected == readback {
-            //         error!("Did not expect to correctly readback with an alignment of {alignment} from 0x{addr:x} with an offset of {offset}");
+            //         error!("did not expect to correctly readback with an alignment of {alignment} from 0x{addr:x} with an offset of {offset}");
             //     }
             //     // assert_ne!(
             //     //     expected, readback,
-            //     //     "Did not expect to correctly readback with an alignment of {alignment} from 0x{addr:x} with an offset of {offset}"
+            //     //     "did not expect to correctly readback with an alignment of {alignment} from 0x{addr:x} with an offset of {offset}"
             //     // );
             // }
 
@@ -772,6 +772,225 @@ fn pci_to_dram_block() {
     }
 }
 
+fn generate_tenisx_noc_test(
+    base_addr: u64,
+    baseline: Tile,
+    read: Tile,
+    write: Tile,
+    alignment: impl std::fmt::Display,
+    chip: &mut Chip,
+) -> Kernel {
+    build_test(
+        &mut chip.dupe().unwrap(),
+        NocId::Noc0,
+        chip.tensix(0),
+        true,
+        &format!(
+            r#"
+                use tensix_std::entry;
+
+                const VALUE_LENGTH: usize = 1473;
+                #[unsafe(no_mangle)]
+                pub static VALUE_BUFFER: SyncUnsafeNocCell<[u8; VALUE_LENGTH]> = SyncUnsafeNocCell::new([0; VALUE_LENGTH]);
+
+                const READBACK_LENGTH: usize = 1600;
+                #[unsafe(no_mangle)]
+                pub static READBACK_BUFFER: SyncUnsafeNocCell<[u8; READBACK_LENGTH]> = SyncUnsafeNocCell::new([0; READBACK_LENGTH]);
+
+                #[entry(brisc)]
+                unsafe fn brisc_main() {{
+                    unsafe {{
+                        unsafe fn set_pc(pc: u16) {{
+                            unsafe {{
+                                tensix_std::set_postcode_brisc(0xc0de0000 | pc as u32);
+                            }}
+                        }}
+
+                        let base_addr = {base_addr};
+                        for i in 0..VALUE_LENGTH {{
+                            (*VALUE_BUFFER.get())[i] = (i % u8::MAX as usize) as u8;
+                        }}
+
+                        set_pc(0x1);
+
+                        let align_read = tensix_std::target::noc_map::ALIGNMENT_{alignment}_READ as u64;
+                        let align_write = tensix_std::target::noc_map::ALIGNMENT_{alignment}_WRITE as u64;
+                        let align_max = align_read.max(align_write) as u64;
+
+                        set_pc(0x2);
+
+                        // Check baseline
+                        tensix_std::target::noc::noc_write(
+                            tensix_std::target::noc::NocCommandSel::default(),
+                            tensix_std::target::noc::NocAddr {{
+                                offset: (base_addr + (align_max - 1)) & !(align_max - 1),
+                                x_end: {x_end_0_0},
+                                y_end: {y_end_0_0},
+                                ..Default::default()
+                            }},
+                            (*VALUE_BUFFER.get()).as_slice(),
+                            true,
+                        );
+
+                        set_pc(0x3);
+
+                        tensix_std::target::noc::noc_read(
+                            tensix_std::target::noc::NocCommandSel::default(),
+                            tensix_std::target::noc::NocAddr {{
+                                offset: (base_addr + (align_max - 1)) & !(align_max - 1),
+                                x_end: {x_end_0_0},
+                                y_end: {y_end_0_0},
+                                ..Default::default()
+                            }},
+                            (*READBACK_BUFFER.get()).as_mut_slice(),
+                            true,
+                        );
+
+                        set_pc(0x4);
+
+                        assert_eq!(&*VALUE_BUFFER.get(), &(*READBACK_BUFFER.get())[..VALUE_LENGTH], "Failed to correctly readback from DRAM with correct alignment");
+
+                        set_pc(0x5);
+
+                        // Check read
+                        let mut alignment = 1;
+                        let mut ever_checked_eq = false;
+                        let mut ever_checked_ne = false;
+                        while alignment < ((align_read as u64) << 2) {{
+                            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
+
+                            for i in 0..VALUE_LENGTH {{
+                                (*VALUE_BUFFER.get())[i] = (*VALUE_BUFFER.get())[i].wrapping_add((0x12345678 >> (i % 4)) as u8);
+                            }}
+
+                            let write_addr = base_addr & !((align_write as u64) - 1);
+                            tensix_std::target::noc::noc_write(
+                                tensix_std::target::noc::NocCommandSel::default(),
+                                tensix_std::target::noc::NocAddr {{
+                                    offset: write_addr,
+                                    x_end: {x_end_0_1},
+                                    y_end: {y_end_0_1},
+                                    ..Default::default()
+                                }},
+                                (*VALUE_BUFFER.get()).as_slice(),
+                                true,
+                            );
+
+                            let offset = addr - write_addr;
+                            let offset = offset as usize;
+
+                            tensix_std::target::noc::noc_read(
+                                tensix_std::target::noc::NocCommandSel::default(),
+                                tensix_std::target::noc::NocAddr {{
+                                    offset: addr,
+                                    x_end: {x_end_0_1},
+                                    y_end: {y_end_0_1},
+                                    ..Default::default()
+                                }},
+                                &mut (*READBACK_BUFFER.get()).as_mut_slice()[..(VALUE_LENGTH - offset)],
+                                true,
+                            );
+
+                            let expected = &(*VALUE_BUFFER.get())[offset..];
+                            let readback = &(*READBACK_BUFFER.get())[..(VALUE_LENGTH - offset)];
+
+                            if alignment >= align_read as u64 {{
+                                ever_checked_eq = true;
+                                assert_eq!(
+                                    expected, readback,
+                                    "did not expect to fail to correctly readback with an alignment of {{alignment}} from 0x{{addr:x}} with an offset of {{offset}}"
+                                );
+                            }} else {{
+                                ever_checked_ne = true;
+                                assert_ne!(
+                                    expected, readback,
+                                    "did not expect to correctly readback with an alignment of {{alignment}} from 0x{{addr:x}} with an offset of {{offset}}"
+                                );
+                            }}
+
+                            alignment <<= 1;
+                        }}
+
+                        assert!(ever_checked_eq && ever_checked_ne);
+
+                        set_pc(0x6);
+
+                        // Chip write
+                        let mut alignment = 1;
+                        let mut ever_checked_eq = false;
+                        let mut ever_checked_ne = false;
+                        while alignment < ((align_write as u64) << 2) {{
+                            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
+
+                            for i in 0..VALUE_LENGTH {{
+                                (*VALUE_BUFFER.get())[i] = (*VALUE_BUFFER.get())[i].wrapping_add((0x12345678 >> (i % 4)) as u8);
+                            }}
+
+                            let read_addr = base_addr & !((align_read as u64) - 1);
+                            tensix_std::target::noc::noc_write(
+                                tensix_std::target::noc::NocCommandSel::default(),
+                                tensix_std::target::noc::NocAddr {{
+                                    offset: addr,
+                                    x_end: {x_end_0_2},
+                                    y_end: {y_end_0_2},
+                                    ..Default::default()
+                                }},
+                                (*VALUE_BUFFER.get()).as_slice(),
+                                true,
+                            );
+
+                            let offset = addr - read_addr;
+                            let offset = offset as usize;
+
+                            assert!(VALUE_LENGTH + offset < READBACK_LENGTH);
+
+                            tensix_std::target::noc::noc_read(
+                                tensix_std::target::noc::NocCommandSel::default(),
+                                tensix_std::target::noc::NocAddr {{
+                                    offset: read_addr,
+                                    x_end: {x_end_0_2},
+                                    y_end: {y_end_0_2},
+                                    ..Default::default()
+                                }},
+                                &mut (*READBACK_BUFFER.get()).as_mut_slice()[..(VALUE_LENGTH + offset)],
+                                true,
+                            );
+
+                            let expected = &(*VALUE_BUFFER.get());
+                            let readback = &(*READBACK_BUFFER.get())[offset..(VALUE_LENGTH + offset)];
+
+                            if alignment >= align_write as u64 {{
+                                ever_checked_eq = true;
+                                assert_eq!(
+                                    expected, readback,
+                                    "Did not expect to fail to correctly write with an alignment of {{alignment}} from 0x{{addr:x}} with an offset of {{offset}}"
+                                );
+                            }} else {{
+                                ever_checked_ne = true;
+                                assert_ne!(
+                                    expected, readback,
+                                    "Did not expect to correctly readback with an alignment of {{alignment}} from 0x{{addr:x}} with an offset of {{offset}}"
+                                );
+                            }}
+
+                            alignment <<= 1;
+                        }}
+
+                        assert!(ever_checked_eq && ever_checked_ne);
+                    }}
+                }}
+            "#,
+            base_addr = base_addr,
+            x_end_0_0 = baseline.addr.n0.0,
+            y_end_0_0 = baseline.addr.n0.1,
+            x_end_0_1 = read.addr.n0.0,
+            y_end_0_1 = read.addr.n0.1,
+            x_end_0_2 = write.addr.n0.0,
+            y_end_0_2 = write.addr.n0.1,
+        ),
+    )
+}
+
 #[test]
 fn tensix_to_dram_block() {
     for id in PciDevice::scan() {
@@ -781,82 +1000,59 @@ fn tensix_to_dram_block() {
             continue;
         };
 
-        let mut kernel = build_test(
-            &mut chip.dupe().unwrap(),
-            NocId::Noc0,
-            chip.tensix(0),
-            true,
-            &format!(
-                r#"
-            use tensix_std::entry;
+        let mut kernel = generate_tenisx_noc_test(
+            chip.dram_size() / 3,
+            chip.dram(0)[0],
+            chip.dram(1)[0],
+            chip.dram(2)[0],
+            "DRAM",
+            &mut chip,
+        );
 
-            #[unsafe(no_mangle)]
-            pub static VALUE_BUFFER: SyncUnsafeNocCell<[u8; 1473]> = SyncUnsafeNocCell::new([0; 1473]);
+        assert!(!kernel.check_panic());
+    }
+}
 
-            #[unsafe(no_mangle)]
-            pub static READBACK_BUFFER: SyncUnsafeNocCell<[u8; 1473]> = SyncUnsafeNocCell::new([0; 1473]);
+#[test]
+fn tensix_to_tensix_block() {
+    for id in PciDevice::scan() {
+        let mut chip = if let Ok(chip) = chip::open(id) {
+            chip
+        } else {
+            continue;
+        };
 
-            #[entry(brisc)]
-            unsafe fn brisc_main() {{
-                unsafe {{
-                    unsafe fn set_pc(pc: u16) {{
-                        unsafe {{
-                            tensix_std::set_postcode_brisc(0xc0de0000 | pc as u32);
-                        }}
-                    }}
+        let mut kernel = generate_tenisx_noc_test(
+            chip.tensix_l1() / 3,
+            chip.tensix(1),
+            chip.tensix(2),
+            chip.tensix(3),
+            "L1",
+            &mut chip,
+        );
 
-                    let base_addr = {base_addr};
-                    for i in 0..(*VALUE_BUFFER.get()).len() {{
-                        (*VALUE_BUFFER.get())[i] = (i % u8::MAX as usize) as u8;
-                    }}
+        assert!(!kernel.check_panic());
+    }
+}
 
-                    set_pc(0x1);
+#[test]
+fn tensix_to_pci_block() {
+    for id in PciDevice::scan() {
+        let mut chip = if let Ok(chip) = chip::open(id) {
+            chip
+        } else {
+            continue;
+        };
 
-                    let read_align = tensix_std::target::noc_map::ALIGNMENT_DRAM_READ as u64;
-                    let write_align = tensix_std::target::noc_map::ALIGNMENT_DRAM_WRITE as u64;
-                    let max_align = read_align.max(write_align) as u64;
+        let buffer = chip.alloc_dma_aligned(1024 * 1024, 64);
 
-                    set_pc(0x2);
-
-                    // Check baseline
-                    tensix_std::target::noc::noc_write(
-                        tensix_std::target::noc::NocCommandSel::default(),
-                        tensix_std::target::noc::NocAddr {{
-                            offset: (base_addr + (max_align - 1)) & !(max_align - 1),
-                            x_end: {x_end_0},
-                            y_end: {y_end_0},
-                            ..Default::default()
-                        }},
-                        (*VALUE_BUFFER.get()).as_slice(),
-                        true,
-                    );
-
-                    set_pc(0x3);
-
-                    tensix_std::target::noc::noc_read(
-                        tensix_std::target::noc::NocCommandSel::default(),
-                        tensix_std::target::noc::NocAddr {{
-                            offset: (base_addr + (max_align - 1)) & !(max_align - 1),
-                            x_end: {x_end_0},
-                            y_end: {y_end_0},
-                            ..Default::default()
-                        }},
-                        (*READBACK_BUFFER.get()).as_mut_slice(),
-                        true,
-                    );
-
-                    set_pc(0x4);
-
-                    assert_eq!(&*VALUE_BUFFER.get(), &*READBACK_BUFFER.get());
-
-                    set_pc(0x5);
-                }}
-            }}
-        "#,
-                base_addr = chip.dram_size() / 3,
-                x_end_0 = chip.dram(0)[0].addr.n0.0,
-                y_end_0 = chip.dram(0)[0].addr.n0.1,
-            ),
+        let mut kernel = generate_tenisx_noc_test(
+            chip.pcie_access(buffer.size as u64 / 3),
+            chip.pcie(),
+            chip.pcie(),
+            chip.pcie(),
+            "PCIE",
+            &mut chip,
         );
 
         assert!(!kernel.check_panic());

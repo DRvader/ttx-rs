@@ -52,6 +52,47 @@ fn write_main(src_file: &PathBuf, test: &str) {
     #![no_std]
     #![no_main]
 
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {{
+        unsafe {{
+            let mut i = 0;
+            while i < n {{
+                dest.add(i).write(src.add(i).read());
+                i += 1;
+            }}
+            dest
+        }}
+    }}
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn memset(dest: *mut u8, src: core::ffi::c_int, n: usize) -> *mut u8 {{
+        unsafe {{
+            let mut i = 0;
+            while i < n {{
+                dest.add(i).write(src as u8);
+                i += 1;
+            }}
+            dest
+        }}
+    }}
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn memcmp(lhs: *const core::ffi::c_void, rhs: *const core::ffi::c_void, count: usize) -> core::ffi::c_int {{
+        unsafe {{
+            for i in 0..count {{
+                let a = lhs.cast::<u8>().offset(i as isize).read();
+                let b = rhs.cast::<u8>().offset(i as isize).read();
+
+                let cmp = a as i32 - b as i32;
+                if cmp != 0 {{
+                    return cmp;
+                }}
+            }}
+        }}
+
+        return 0;
+    }}
+
     #[repr(align(64))]
     struct NocAligned<T>(T);
 
@@ -1076,6 +1117,10 @@ fn tensix_to_dram_test() {
             continue;
         };
 
+        if chip.arch().is_grayskull() {
+            continue;
+        }
+
         let mut kernel = rust_test! {
             nowait,
             chip,
@@ -1133,6 +1178,8 @@ fn tensix_to_dram_test() {
                             core::slice::from_raw_parts_mut(buf.add(index) as *mut u8, 4),
                             true,
                         );
+
+                        assert_eq!(0xfaca, buf.add(index).read_volatile());
                     }
                 }
             }

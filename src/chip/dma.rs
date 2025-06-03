@@ -5,8 +5,8 @@ pub use luwen::ttkmd_if::DmaBuffer;
 pub struct AlignedDmaBuffer {
     buffer: DmaBuffer,
     offset: usize,
-    align: u32,
-    size: u32,
+    pub align: u32,
+    pub size: usize,
 }
 
 impl std::ops::Index<std::ops::Range<usize>> for AlignedDmaBuffer {
@@ -56,31 +56,31 @@ impl AlignedDmaBuffer {
 }
 
 impl Chip {
-    pub fn alloc_dma(&mut self, size: u32) -> DmaBuffer {
+    pub fn alloc_dma(&mut self, size: usize) -> DmaBuffer {
         match self {
             Chip::Grayskull(grayskull) => grayskull
                 .interface
                 .device
-                .allocate_dma_buffer(size)
+                .allocate_dma_buffer(size as u32)
                 .map_err(|v| v.to_string())
                 .unwrap(),
             Chip::Wormhole(wormhole) => wormhole
                 .interface
                 .device
-                .allocate_dma_buffer(size)
+                .allocate_dma_buffer(size as u32)
                 .map_err(|v| v.to_string())
                 .unwrap(),
             Chip::Blackhole(blackhole) => blackhole
                 .interface
                 .device
-                .allocate_dma_buffer(size)
+                .allocate_dma_buffer(size as u32)
                 .map_err(|v| v.to_string())
                 .unwrap(),
         }
     }
 
-    pub fn alloc_dma_aligned(&mut self, size: u32, align: u32) -> AlignedDmaBuffer {
-        let actual_size = size + align as u32;
+    pub fn alloc_dma_aligned(&mut self, size: usize, align: u32) -> AlignedDmaBuffer {
+        let actual_size = size + align as usize;
 
         let buffer = self.alloc_dma(actual_size);
 
@@ -91,7 +91,7 @@ impl Chip {
         AlignedDmaBuffer {
             buffer,
             offset: offset as usize,
-            size: actual_size - offset as u32,
+            size: actual_size - offset as usize,
             align,
         }
     }
