@@ -70,7 +70,7 @@ fn mask_off(existing: &mut [u8], high_bit: u32) -> &mut [u8] {
     }
 
     let len = existing.len();
-    &mut existing[0..(top_byte as usize + 1).min(len)]
+    &mut existing[0..(top_byte + 1).min(len)]
 }
 
 /// Take a value and place it onto the existing value shifting by, `lower` and masking off at `upper`
@@ -87,10 +87,9 @@ fn write_modify(existing: &mut [u8], value: &[u8], lower: u32, upper: u32) {
 
     let mut carry = existing[write_ptr as usize] & ((1 << write_shift) - 1);
     while shift_count > 0 {
-        let to_write =
-            (value.get(read_ptr as usize).map(|v| *v).unwrap_or(0) << write_shift) | carry;
+        let to_write = (value.get(read_ptr as usize).copied().unwrap_or(0) << write_shift) | carry;
         if write_shift > 0 {
-            carry = (value.get(read_ptr as usize).map(|v| *v).unwrap_or(0) >> (8 - write_shift))
+            carry = (value.get(read_ptr as usize).copied().unwrap_or(0) >> (8 - write_shift))
                 & ((1 << write_shift) - 1);
         }
 
@@ -133,7 +132,7 @@ pub fn read_field<'a, C>(
     field: Field,
     value: &'a mut [u8],
 ) -> Option<&'a [u8]> {
-    if value.len() < field.size as usize {
+    if value.len() < field.size {
         // return Err(AxiError::ReadBufferTooSmall)?;
         return None;
     }
@@ -159,7 +158,7 @@ pub fn write_field<C>(
     existing: &mut [u8],
     value: &[u8],
 ) -> Option<()> {
-    if value.len() < field.size as usize {
+    if value.len() < field.size {
         // return Err(AxiError::ReadBufferTooSmall)?;
         return None;
     }
@@ -172,7 +171,7 @@ pub fn write_field<C>(
         write_func(context, field.addr, existing);
     } else {
         // We are writing the full size of the field
-        write_func(context, field.addr, &value[..field.size as usize]);
+        write_func(context, field.addr, &value[..field.size]);
     };
 
     Some(())

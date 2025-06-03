@@ -27,17 +27,17 @@ pub enum TelemetryTag {
     AsicId = 3,
     HarvestingState = 4,
     UpdateTelemSpeed = 5,
-    VCORE = 6,
-    TDP = 7,
-    TDC = 8,
+    Vcore = 6,
+    Tdp = 7,
+    Tdc = 8,
     VddLimits = 9,
     ThmLimits = 10,
     AsicTemperature = 11,
     VregTemperature = 12,
     BoardTemperature = 13,
-    AICLK = 14,
-    AXICLK = 15,
-    ARCCLK = 16,
+    Aiclk = 14,
+    Axiclk = 15,
+    Arcclk = 16,
     L2CPUCLK0 = 17,
     L2CPUCLK1 = 18,
     L2CPUCLK2 = 19,
@@ -95,7 +95,7 @@ impl TelemetryData {
     }
 
     pub fn aiclk(&self) -> Option<u32> {
-        self.get(TelemetryTag::AICLK)
+        self.get(TelemetryTag::Aiclk)
     }
 
     pub fn translation_enabled(&self) -> bool {
@@ -139,19 +139,27 @@ impl Telemetry {
             return Err(TelemetryError::TelemetryNotReady);
         }
 
-        let entry_count = chip.tile_read32(NocId::Noc0, arc, telemetry_table_addr + 4)?;
-
         if telemetry_table_addr == 0 || telemetry_table_data == 0 {
             return Err(TelemetryError::TelemetryNotReady);
         }
 
+        let mut output = Telemetry {
+            max_offset: 0,
+            entries: BTreeMap::new(),
+            table_addr: telemetry_table_addr,
+            table_data: telemetry_table_data,
+        };
+
+        output.reload_entries(chip, arc)?;
+
+        Ok(output)
+    }
+
+    pub fn reload_entries(&mut self, chip: &mut PciNoc, arc: NocAddress) -> Result<(), PciError> {
+        let entry_count = chip.tile_read32(NocId::Noc0, arc, self.table_addr + 4)?;
+
         let mut entry_offsets = vec![0; 4 * entry_count as usize];
-        chip.tile_read(
-            NocId::Noc0,
-            arc,
-            telemetry_table_addr + 8,
-            &mut entry_offsets,
-        )?;
+        chip.tile_read(NocId::Noc0, arc, self.table_addr + 8, &mut entry_offsets)?;
 
         let mut map = BTreeMap::new();
 
@@ -163,17 +171,15 @@ impl Telemetry {
             map.insert(tag, offset);
         }
 
-        Ok(Telemetry {
-            max_offset: map.values().max().copied().unwrap_or(0) as u64,
-            entries: map,
-            table_addr: telemetry_table_addr,
-            table_data: telemetry_table_data,
-        })
+        self.max_offset = map.values().max().copied().unwrap_or(0) as u64;
+        self.entries = map;
+
+        Ok(())
     }
 
     pub fn read(&self, chip: &mut PciNoc, arc: NocAddress) -> Result<TelemetryData, PciError> {
         let mut data = vec![0; 4 * self.max_offset as usize];
-        chip.tile_read(NocId::Noc0, arc, self.table_addr, &mut data)?;
+        chip.tile_read(NocId::Noc0, arc, self.table_data, &mut data)?;
 
         let mut map = BTreeMap::new();
         for (tag, offset) in &self.entries {

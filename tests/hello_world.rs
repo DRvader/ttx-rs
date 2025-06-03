@@ -163,7 +163,7 @@ fn build_test(chip: &mut Chip, noc_id: NocId, tile: Tile, file: &str, wait: bool
     write_main(&src_file, file);
 
     let kernel_data = chip::loader::build_kernel(
-        &"test".to_string(),
+        "test",
         chip.arch(),
         chip::loader::LoadOptions::new(dir.path()).hide_output(),
         None,
@@ -183,7 +183,7 @@ fn build_tests(chip: &mut Chip, tiles: Option<Vec<Tile>>, file: &str, wait: bool
     write_main(&src_file, file);
 
     let mut kernel_data = chip::loader::build_kernel(
-        &"test".to_string(),
+        "test",
         chip.arch(),
         chip::loader::LoadOptions::new(dir.path()).hide_output(),
         None,
@@ -244,7 +244,6 @@ fn hello_world() {
 }
 
 #[test]
-#[should_panic]
 fn panic() {
     for id in PciDevice::scan() {
         let mut chip = if let Ok(chip) = chip::open(id) {
@@ -267,7 +266,7 @@ fn panic() {
             }
         };
 
-        assert!(!kernel.check_panic());
+        assert!(kernel.check_panic());
     }
 }
 

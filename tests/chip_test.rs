@@ -14,7 +14,7 @@ fn read_write_test() {
             continue;
         };
 
-        let addr = 3 as u64;
+        let addr = 3;
         let aligned_addr = (addr + 3) & !3;
 
         let noc_id = NocId::Noc0;
@@ -80,9 +80,7 @@ fn read_write_test() {
         chip.noc_read(noc_id, tile, aligned_addr, &mut readback_buffer);
         assert_eq!(write_buffer, readback_buffer);
 
-        let mut write_buffer = Vec::new();
-        write_buffer.push(0xad);
-        write_buffer.push(0xde);
+        let write_buffer = [0xad, 0xde];
         chip.noc_write(noc_id, tile, aligned_addr + 1, &write_buffer);
 
         let mut readback_buffer = vec![0u8; 4];
@@ -98,9 +96,7 @@ fn read_write_test() {
         chip.noc_read(noc_id, tile, aligned_addr, &mut readback_buffer);
         assert_eq!(write_buffer, readback_buffer);
 
-        let mut write_buffer = Vec::new();
-        write_buffer.push(0xad);
-        write_buffer.push(0xde);
+        let write_buffer = [0xad, 0xde];
         chip.noc_write(noc_id, tile, aligned_addr + 3, &write_buffer);
 
         let mut readback_buffer = vec![0u8; 7];
@@ -309,9 +305,7 @@ fn arc_read_write_test() {
                 .unwrap();
             assert_eq!(write_buffer, readback_buffer);
 
-            let mut write_buffer = Vec::new();
-            write_buffer.push(0xad);
-            write_buffer.push(0xde);
+            let write_buffer = [0xad, 0xde];
             raw_device
                 .write_block(aligned_addr as u32 + 1, &write_buffer)
                 .unwrap();
@@ -335,9 +329,7 @@ fn arc_read_write_test() {
                 .unwrap();
             assert_eq!(write_buffer, readback_buffer);
 
-            let mut write_buffer = Vec::new();
-            write_buffer.push(0xad);
-            write_buffer.push(0xde);
+            let write_buffer = [0xad, 0xde];
             raw_device
                 .write_block(aligned_addr as u32 + 3, &write_buffer)
                 .unwrap();

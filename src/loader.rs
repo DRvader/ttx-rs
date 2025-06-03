@@ -137,35 +137,35 @@ fn load_elf(elf: &[u8]) -> KernelData {
         brisc_state: CoreData {
             entry: sym_table.get("__brisc_start").copied(),
             state: sym_table.get("STATE_BRISC").copied(),
-            pc: sym_table.get("POSTCODE_BRISC").copied(),
+            postcode: sym_table.get("POSTCODE_BRISC").copied(),
             panic: sym_table.get("PANIC_DATA_BRISC").copied(),
         },
 
         ncrisc_state: CoreData {
             entry: sym_table.get("__ncrisc_start").copied(),
             state: sym_table.get("STATE_NCRISC").copied(),
-            pc: sym_table.get("POSTCODE_NCRISC").copied(),
+            postcode: sym_table.get("POSTCODE_NCRISC").copied(),
             panic: sym_table.get("PANIC_DATA_NCRISC").copied(),
         },
 
         trisc0_state: CoreData {
             entry: sym_table.get("__trisc0_start").copied(),
             state: sym_table.get("STATE_TRISC0").copied(),
-            pc: sym_table.get("POSTCODE_TRISC0").copied(),
+            postcode: sym_table.get("POSTCODE_TRISC0").copied(),
             panic: sym_table.get("PANIC_DATA_TRISC0").copied(),
         },
 
         trisc1_state: CoreData {
             entry: sym_table.get("__trisc1_start").copied(),
             state: sym_table.get("STATE_TRISC1").copied(),
-            pc: sym_table.get("POSTCODE_TRISC1").copied(),
+            postcode: sym_table.get("POSTCODE_TRISC1").copied(),
             panic: sym_table.get("PANIC_DATA_TRISC1").copied(),
         },
 
         trisc2_state: CoreData {
             entry: sym_table.get("__trisc2_start").copied(),
             state: sym_table.get("STATE_TRISC2").copied(),
-            pc: sym_table.get("POSTCODE_TRISC2").copied(),
+            postcode: sym_table.get("POSTCODE_TRISC2").copied(),
             panic: sym_table.get("PANIC_DATA_TRISC2").copied(),
         },
 

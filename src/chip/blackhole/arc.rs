@@ -103,7 +103,7 @@ impl<const N: usize> MessageQueue<N> {
     }
 
     fn trigger_int(&self, chip: &mut Blackhole) -> Result<bool, MessageError> {
-        let mut mvalue = vec![0u8; self.fw_int.size as usize];
+        let mut mvalue = vec![0u8; self.fw_int.size];
         let value = crate::chip::field::read_field(
             chip,
             |chip, addr, data| arc_read(chip, addr, data).unwrap(),
@@ -160,8 +160,8 @@ impl<const N: usize> MessageQueue<N> {
 
         let request_entry_offset =
             self.header_size + (request_queue_wptr % self.queue_size) * N as u32;
-        for i in 0..request.len() {
-            self.qwrite32(chip, index, request_entry_offset + i as u32, request[i])?;
+        for (i, request) in request.iter().enumerate() {
+            self.qwrite32(chip, index, request_entry_offset + i as u32, *request)?;
         }
 
         let request_queue_wptr = (request_queue_wptr + 1) % (2 * self.queue_size);
@@ -201,8 +201,8 @@ impl<const N: usize> MessageQueue<N> {
 
         let response_entry_offset = self.header_size
             + (self.queue_size + (response_queue_rptr % self.queue_size)) * N as u32;
-        for i in 0..result.len() {
-            result[i] = self.qread32(chip, index, response_entry_offset + i as u32)?;
+        for (i, result) in result.iter_mut().enumerate() {
+            *result = self.qread32(chip, index, response_entry_offset + i as u32)?;
         }
 
         let response_queue_rptr = (response_queue_rptr + 1) % (2 * self.queue_size);
@@ -234,7 +234,7 @@ impl<const N: usize> MessageQueue<N> {
         self.push_request(chip, index, &request, timeout)?;
         self.pop_response(chip, index, &mut request, timeout)?;
 
-        return Ok(request);
+        Ok(request)
     }
 }
 

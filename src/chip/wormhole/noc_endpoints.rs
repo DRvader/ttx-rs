@@ -31,15 +31,15 @@ const PCI_LOCATION: (u8, u8) = (0, 3);
 
 const GRID_SIZE_X: u8 = 10;
 const GRID_SIZE_Y: u8 = 12;
-const NUM_TENSIX_X: u8 = GRID_SIZE_X - 2;
+const _NUM_TENSIX_X: u8 = GRID_SIZE_X - 2;
 const NUM_TENSIX_Y: u8 = GRID_SIZE_Y - 2;
 
-const PHYS_X_TO_NOC_0_X: &[u8] = &[0, 9, 1, 8, 2, 7, 3, 6, 4, 5];
+const _PHYS_X_TO_NOC_0_X: &[u8] = &[0, 9, 1, 8, 2, 7, 3, 6, 4, 5];
 const PHYS_Y_TO_NOC_0_Y: &[u8] = &[0, 11, 1, 10, 2, 9, 3, 8, 4, 7, 5, 6];
-const PHYS_X_TO_NOC_1_X: &[u8] = &[9, 0, 8, 1, 7, 2, 6, 3, 5, 4];
-const PHYS_Y_TO_NOC_1_Y: &[u8] = &[11, 0, 10, 1, 9, 2, 8, 3, 7, 4, 6, 5];
+const _PHYS_X_TO_NOC_1_X: &[u8] = &[9, 0, 8, 1, 7, 2, 6, 3, 5, 4];
+const _PHYS_Y_TO_NOC_1_Y: &[u8] = &[11, 0, 10, 1, 9, 2, 8, 3, 7, 4, 6, 5];
 
-const ALL_TENSIX_ROWS: &[u8] = &[1, 2, 3, 4, 5, 7, 8, 9, 10, 11];
+const _ALL_TENSIX_ROWS: &[u8] = &[1, 2, 3, 4, 5, 7, 8, 9, 10, 11];
 const ALL_TENSIX_COLS: &[u8] = &[1, 2, 3, 4, 6, 7, 8, 9];
 
 fn coord_flip(x: u8, y: u8) -> NocAddress {
@@ -83,7 +83,7 @@ pub fn get_grid(harvest: u32) -> NocGrid {
                 align_write: 16,
             })
             .collect(),
-        dram: Vec::from_iter(DRAM_LOCATIONS.into_iter().cloned().map(|cores| {
+        dram: Vec::from_iter(DRAM_LOCATIONS.iter().cloned().map(|cores| {
             cores.map(|(x, y)| Tile {
                 addr: coord_flip(x, y),
                 align_read: 32,
@@ -100,7 +100,7 @@ pub fn get_grid(harvest: u32) -> NocGrid {
             align_read: 16,
             align_write: 16,
         },
-        eth: Vec::from_iter(ETH_LOCATIONS.into_iter().cloned().map(|(x, y)| Tile {
+        eth: Vec::from_iter(ETH_LOCATIONS.iter().cloned().map(|(x, y)| Tile {
             addr: coord_flip(x, y),
             align_read: 16,
             align_write: 16,

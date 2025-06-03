@@ -16,13 +16,13 @@ const ARC_LOCATION: (u8, u8) = (0, 2);
 const PCI_LOCATION: (u8, u8) = (0, 4);
 const GRID_SIZE_X: u8 = 13;
 const GRID_SIZE_Y: u8 = 12;
-const NUM_TENSIX_X: u8 = GRID_SIZE_X - 1;
-const NUM_TENSIX_Y: u8 = GRID_SIZE_Y - 2;
+const _NUM_TENSIX_X: u8 = GRID_SIZE_X - 1;
+const _NUM_TENSIX_Y: u8 = GRID_SIZE_Y - 2;
 
-const PHYS_X_TO_NOC_0_X: &[u8] = &[0, 12, 1, 11, 2, 10, 3, 9, 4, 8, 5, 7, 6];
+const _PHYS_X_TO_NOC_0_X: &[u8] = &[0, 12, 1, 11, 2, 10, 3, 9, 4, 8, 5, 7, 6];
 const PHYS_Y_TO_NOC_0_Y: &[u8] = &[0, 11, 1, 10, 2, 9, 3, 8, 4, 7, 5, 6];
-const PHYS_X_TO_NOC_1_X: &[u8] = &[12, 0, 11, 1, 10, 2, 9, 3, 8, 4, 7, 5, 6];
-const PHYS_Y_TO_NOC_1_Y: &[u8] = &[11, 0, 10, 1, 9, 2, 8, 3, 7, 4, 6, 5];
+const _PHYS_X_TO_NOC_1_X: &[u8] = &[12, 0, 11, 1, 10, 2, 9, 3, 8, 4, 7, 5, 6];
+const _PHYS_Y_TO_NOC_1_Y: &[u8] = &[11, 0, 10, 1, 9, 2, 8, 3, 7, 4, 6, 5];
 
 #[derive(Debug)]
 pub struct NocGrid {
@@ -73,7 +73,7 @@ pub fn get_grid(harvest: u32) -> NocGrid {
                 align_write: 16,
             })
             .collect(),
-        dram: Vec::from_iter(DRAM_LOCATIONS.into_iter().cloned().map(|(x, y)| Tile {
+        dram: Vec::from_iter(DRAM_LOCATIONS.iter().cloned().map(|(x, y)| Tile {
             addr: coord_flip(x, y),
             align_read: 32,
             align_write: 16,
@@ -92,6 +92,6 @@ pub fn get_grid(harvest: u32) -> NocGrid {
         // 1MB per tensix
         tensix_l1_size: 1024 * 1024,
         // 1GB per core
-        dram_size: 1 * 1024 * 1024 * 1024,
+        dram_size: 1024 * 1024 * 1024,
     }
 }

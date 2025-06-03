@@ -1,4 +1,4 @@
-use std::{path::PathBuf, u8};
+use std::path::PathBuf;
 
 use luwen::ttkmd_if::PciDevice;
 use tempfile::TempDir;
@@ -163,7 +163,7 @@ fn build_test(chip: &mut Chip, noc_id: NocId, tile: Tile, wait: bool, file: &str
     write_main(&src_file, file);
 
     let kernel_data = chip::loader::build_kernel(
-        &"test".to_string(),
+        "test",
         chip.arch(),
         chip::loader::LoadOptions::new(dir.path()).hide_output(),
         None,
@@ -183,7 +183,7 @@ fn build_tests(chip: &mut Chip, tiles: Option<Vec<Tile>>, file: &str, wait: bool
     write_main(&src_file, file);
 
     let mut kernel_data = chip::loader::build_kernel(
-        &"test".to_string(),
+        "test",
         chip.arch(),
         chip::loader::LoadOptions::new(dir.path()).hide_output(),
         None,
@@ -192,30 +192,6 @@ fn build_tests(chip: &mut Chip, tiles: Option<Vec<Tile>>, file: &str, wait: bool
     chip.load_kernels(&mut kernel_data, tiles, wait);
 
     kernel_data
-}
-
-macro_rules! rust_test {
-    ($chip:ident, $noc_id:expr, $tile:expr, {$($t:tt)*}) => {{
-        let __tile = $tile;
-        build_test(
-            &mut $chip,
-            $noc_id,
-            __tile,
-            core::stringify!($($t)*),
-            true
-        )
-    }};
-
-    (nowait, $chip:ident, $noc_id:expr, $tile:expr, {$($t:tt)*}) => {{
-        let __tile = $tile;
-        build_test(
-            &mut $chip,
-            $noc_id,
-            __tile,
-            core::stringify!($($t)*),
-            false
-        )
-    }};
 }
 
 #[test]
@@ -246,7 +222,7 @@ fn pci_to_tensix_32() {
         // let mut ever_checked_eq = false;
         // let mut ever_checked_ne = false;
         while alignment < ((tile.align_read as u64) << 2) {
-            let addr = (base_addr + (alignment - 1) & !(alignment - 1)) + alignment;
+            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
             assert!(addr < chip.tensix_l1());
 
             read_value = read_value.wrapping_add(0x12345678);
@@ -307,7 +283,7 @@ fn pci_to_tensix_32() {
         // let mut ever_checked_eq = false;
         // let mut ever_checked_ne = false;
         while alignment < ((tile.align_read as u64) << 2) {
-            let addr = (base_addr + (alignment - 1) & !(alignment - 1)) + alignment;
+            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
             assert!(addr < chip.tensix_l1());
 
             write_value = write_value.wrapping_add(0x12345678);
@@ -368,8 +344,8 @@ fn pci_to_tensix_block() {
 
         let base_addr = chip.tensix_l1() / 3;
         let mut value = vec![0u8; 1473];
-        for i in 0..value.len() {
-            value[i] = (i % u8::MAX as usize) as u8;
+        for (i, value) in value.iter_mut().enumerate() {
+            *value = (i % u8::MAX as usize) as u8;
         }
 
         // Check baseline
@@ -394,11 +370,11 @@ fn pci_to_tensix_block() {
         // let mut ever_checked_eq = false;
         // let mut ever_checked_ne = false;
         while alignment < ((tile.align_read as u64) << 2) {
-            let addr = (base_addr + (alignment - 1) & !(alignment - 1)) + alignment;
+            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
             assert!(addr < chip.tensix_l1());
 
-            for i in 0..value.len() {
-                value[i] = value[i].wrapping_add((0x12345678 >> (i % 4)) as u8);
+            for (i, value) in value.iter_mut().enumerate() {
+                *value = value.wrapping_add((0x12345678 >> (i % 4)) as u8);
             }
 
             let write_addr = base_addr & !((tile.align_write as u64) - 1);
@@ -446,11 +422,11 @@ fn pci_to_tensix_block() {
         // let mut ever_checked_eq = false;
         // let mut ever_checked_ne = false;
         while alignment < ((tile.align_read as u64) << 2) {
-            let addr = (base_addr + (alignment - 1) & !(alignment - 1)) + alignment;
+            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
             assert!(addr < chip.tensix_l1());
 
-            for i in 0..value.len() {
-                value[i] = value[i].wrapping_add((0x12345678 >> (i % 4)) as u8);
+            for (i, value) in value.iter_mut().enumerate() {
+                *value = value.wrapping_add((0x12345678 >> (i % 4)) as u8);
             }
 
             let read_addr = base_addr & !((tile.align_read as u64) - 1);
@@ -523,7 +499,7 @@ fn pci_to_dram_32() {
         // let mut ever_checked_eq = false;
         // let mut ever_checked_ne = false;
         while alignment < ((tile.align_read as u64) << 2) {
-            let addr = (base_addr + (alignment - 1) & !(alignment - 1)) + alignment;
+            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
             assert!(addr < chip.dram_size());
 
             read_value = read_value.wrapping_add(0x12345678);
@@ -584,7 +560,7 @@ fn pci_to_dram_32() {
         // let mut ever_checked_eq = false;
         // let mut ever_checked_ne = false;
         while alignment < ((tile.align_read as u64) << 2) {
-            let addr = (base_addr + (alignment - 1) & !(alignment - 1)) + alignment;
+            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
             assert!(addr < chip.dram_size());
 
             write_value = write_value.wrapping_add(0x12345678);
@@ -645,8 +621,8 @@ fn pci_to_dram_block() {
 
         let base_addr = chip.dram_size() / 3;
         let mut value = vec![0u8; 1473];
-        for i in 0..value.len() {
-            value[i] = (i % u8::MAX as usize) as u8;
+        for (i, value) in value.iter_mut().enumerate() {
+            *value = (i % u8::MAX as usize) as u8;
         }
 
         // Check baseline
@@ -672,11 +648,11 @@ fn pci_to_dram_block() {
         // let mut ever_checked_eq = false;
         // let mut ever_checked_ne = false;
         while alignment < ((tile.align_read as u64) << 2) {
-            let addr = (base_addr + (alignment - 1) & !(alignment - 1)) + alignment;
+            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
             assert!(addr < chip.dram_size());
 
-            for i in 0..value.len() {
-                value[i] = value[i].wrapping_add((0x12345678 >> (i % 4)) as u8);
+            for (i, value) in value.iter_mut().enumerate() {
+                *value = value.wrapping_add((0x12345678 >> (i % 4)) as u8);
             }
 
             let write_addr = base_addr & !((tile.align_write as u64) - 1);
@@ -724,11 +700,11 @@ fn pci_to_dram_block() {
         // let mut ever_checked_eq = false;
         // let mut ever_checked_ne = false;
         while alignment < ((tile.align_read as u64) << 2) {
-            let addr = (base_addr + (alignment - 1) & !(alignment - 1)) + alignment;
+            let addr = ((base_addr + ((alignment << 1) - 1)) & !((alignment << 1) - 1)) + alignment;
             assert!(addr < chip.dram_size());
 
-            for i in 0..value.len() {
-                value[i] = value[i].wrapping_add((0x12345678 >> (i % 4)) as u8);
+            for (i, value) in value.iter_mut().enumerate() {
+                *value = value.wrapping_add((0x12345678 >> (i % 4)) as u8);
             }
 
             let read_addr = base_addr & !((tile.align_read as u64) - 1);

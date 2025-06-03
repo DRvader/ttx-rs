@@ -4,14 +4,14 @@ use crate::chip::noc::{NocAddress, Tile};
 
 use super::Blackhole;
 
-const PHYS_TO_NOC0_X: &[u32] = &[0, 1, 16, 2, 15, 3, 14, 4, 13, 5, 12, 6, 11, 7, 10, 8, 9];
-const PHYS_TO_NOC0_Y: &[u32] = &[0, 1, 11, 2, 10, 3, 9, 4, 8, 5, 7, 6];
+const _PHYS_TO_NOC0_X: &[u32] = &[0, 1, 16, 2, 15, 3, 14, 4, 13, 5, 12, 6, 11, 7, 10, 8, 9];
+const _PHYS_TO_NOC0_Y: &[u32] = &[0, 1, 11, 2, 10, 3, 9, 4, 8, 5, 7, 6];
 
 const GRID_SIZE_X: u8 = 17;
 const GRID_SIZE_Y: u8 = 12;
 
-const NUM_TENSIX_ROWS: u32 = 10;
-const NUM_TENSIX_COLS: u32 = 14;
+const _NUM_TENSIX_ROWS: u32 = 10;
+const _NUM_TENSIX_COLS: u32 = 14;
 
 const GDDR_NOC0_COORDS: &[[(u8, u8); 3]] = &[
     [(0, 0), (0, 1), (0, 11)],
@@ -184,7 +184,7 @@ impl Endpoints {
                 col += 1;
             }
 
-            for core in all_tensix[..index].into_iter() {
+            for core in all_tensix[..index].iter() {
                 if working_cols.contains(&core.0) {
                     endpoints.tensix[endpoints.tensix_active_count] = Tile {
                         addr: coord_flip(core.0, core.1),

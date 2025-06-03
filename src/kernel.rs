@@ -19,6 +19,10 @@ impl KernelBytes {
     pub fn len(&self) -> usize {
         self.data.0.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.0.is_empty()
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -26,13 +30,21 @@ pub struct CoreData {
     pub panic: Option<u64>,
     pub entry: Option<u64>,
     pub state: Option<u64>,
-    pub pc: Option<u64>,
+    pub postcode: Option<u64>,
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct PerCoreCache {
+    name: String,
+    state: Option<u32>,
+    postcode: Option<u32>,
+    panic_data: Option<PanicData>,
 }
 
 #[derive(Clone, Default)]
 pub struct CoreDataCache {
     sync: Option<u32>,
-    core_data: Vec<(String, Option<u32>, Option<u32>, Option<PanicData>)>,
+    core_data: Vec<PerCoreCache>,
     panic_data: Option<PanicData>,
 }
 
@@ -68,7 +80,7 @@ impl KernelBinData {
             .value_vec(chip, noc_id, tile)
             .core_data
             .into_iter()
-            .all(|v| v.1.map(|v| v == 0).unwrap_or(true))
+            .all(|v| v.state.map(|v| v == 0).unwrap_or(true))
         {
             if let Some(sync) = self.start_sync {
                 let mut sync_value = chip.noc_read32(noc_id, tile, sync);
@@ -116,7 +128,8 @@ impl KernelBinData {
 
             return true;
         }
-        return false;
+
+        false
     }
 
     pub fn read_panic(
@@ -140,16 +153,16 @@ impl KernelBinData {
     fn value_vec(&mut self, chip: &mut Chip, noc_id: NocId, tile: NocAddress) -> CoreDataCache {
         let sync = self
             .start_sync
-            .map(|sync| chip.noc_read32(noc_id, tile, sync as u64));
+            .map(|sync| chip.noc_read32(noc_id, tile, sync));
         let mut values = Vec::new();
         for state in self.state_vec() {
             let pd = self.read_panic((state.1).panic, chip, noc_id, tile);
-            values.push((
-                state.0,
-                ((state.1).state).map(|v| chip.noc_read32(noc_id, tile, v)),
-                ((state.1).pc).map(|v| chip.noc_read32(noc_id, tile, v)),
-                pd,
-            ));
+            values.push(PerCoreCache {
+                name: state.0,
+                state: ((state.1).state).map(|v| chip.noc_read32(noc_id, tile, v)),
+                postcode: ((state.1).postcode).map(|v| chip.noc_read32(noc_id, tile, v)),
+                panic_data: pd,
+            });
         }
 
         CoreDataCache {
@@ -175,12 +188,11 @@ impl KernelBinData {
         force: bool,
     ) {
         let state = self.value_vec(chip, noc_id, tile);
-        if !force {
-            if (state.sync, &state.core_data)
+        if !force
+            && (state.sync, &state.core_data)
                 == (self.core_data_cache.sync, &self.core_data_cache.core_data)
-            {
-                return;
-            }
+        {
+            return;
         }
 
         tracing::info!(
@@ -204,8 +216,14 @@ impl KernelBinData {
             tracing::info!("noc_debug: 0x{:x}", brc);
         }
 
-        for (name, state, postcode, panic) in &state.core_data {
-            if let Some(panic) = panic {
+        for PerCoreCache {
+            name,
+            state,
+            postcode,
+            panic_data,
+        } in &state.core_data
+        {
+            if let Some(panic) = panic_data {
                 self.print_core_panic_data(chip, noc_id, tile, name, panic);
             }
 
@@ -239,7 +257,7 @@ impl KernelBinData {
         value
             .core_data
             .iter()
-            .any(|v| v.1.map(|v| v == 6).unwrap_or(false))
+            .any(|v| v.state.map(|v| v == 6).unwrap_or(false))
     }
 
     pub fn wait(&mut self, chip: &mut Chip, noc_id: NocId, tile: NocAddress) {
@@ -263,7 +281,7 @@ impl KernelBinData {
             .map(|v| chip.noc_read32(noc_id, tile, v))
             .collect::<Vec<_>>();
 
-        let total_count = state_value.iter().count();
+        let total_count = state_value.len();
         let complete_count = state_value.iter().filter(|v| **v >= 3).count();
         let not_started_count = state_value.iter().filter(|v| **v == 0).count();
 
@@ -357,6 +375,7 @@ impl KernelData {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn set_entry(
         &mut self,
         chip: &mut Chip,

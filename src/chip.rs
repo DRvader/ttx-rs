@@ -22,7 +22,13 @@ pub static IDLE: Mutex<Vec<AtomicBool>> = Mutex::new(Vec::new());
 pub enum Chip {
     Grayskull(Grayskull),
     Wormhole(Wormhole),
-    Blackhole(Blackhole),
+    Blackhole(Box<Blackhole>),
+}
+
+impl std::fmt::Debug for Chip {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}[{}]", self.arch(), self.id())
+    }
 }
 
 impl std::fmt::Display for Chip {
@@ -50,7 +56,9 @@ pub fn open(index: usize) -> Result<Chip, String> {
     Ok(match device.arch {
         Arch::Grayskull => Chip::Grayskull(Grayskull::init(device).map_err(|v| v.to_string())?),
         Arch::Wormhole => Chip::Wormhole(Wormhole::init(device).map_err(|v| v.to_string())?),
-        Arch::Blackhole => Chip::Blackhole(Blackhole::init(device).map_err(|v| v.to_string())?),
+        Arch::Blackhole => Chip::Blackhole(Box::new(
+            Blackhole::init(device).map_err(|v| v.to_string())?,
+        )),
         Arch::Unknown(id) => {
             unreachable!("Unkown chip type {id:x}");
         }
@@ -72,12 +80,12 @@ impl Chip {
                 )
                 .map_err(|v| v.to_string())?,
             ),
-            Chip::Blackhole(blackhole) => Chip::Blackhole(
+            Chip::Blackhole(blackhole) => Chip::Blackhole(Box::new(
                 Blackhole::init(
                     PciDevice::open(blackhole.interface.device.id).map_err(|v| v.to_string())?,
                 )
                 .map_err(|v| v.to_string())?,
-            ),
+            )),
         })
     }
 

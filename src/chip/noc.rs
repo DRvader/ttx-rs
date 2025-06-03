@@ -16,12 +16,12 @@ pub struct NocAddress {
     pub n1: (u8, u8),
 }
 
-impl Into<u32> for NocAddress {
-    fn into(self) -> u32 {
-        self.n0.0 as u32
-            | ((self.n0.1 as u32) << 8)
-            | ((self.n1.0 as u32) << 16)
-            | ((self.n1.1 as u32) << 24)
+impl From<NocAddress> for u32 {
+    fn from(val: NocAddress) -> Self {
+        val.n0.0 as u32
+            | ((val.n0.1 as u32) << 8)
+            | ((val.n1.0 as u32) << 16)
+            | ((val.n1.1 as u32) << 24)
     }
 }
 
@@ -50,15 +50,15 @@ pub struct Tile {
     pub align_write: u8,
 }
 
-impl Into<NocAddress> for Tile {
-    fn into(self) -> NocAddress {
-        self.addr
+impl From<Tile> for NocAddress {
+    fn from(val: Tile) -> Self {
+        val.addr
     }
 }
 
-impl Into<u32> for Tile {
-    fn into(self) -> u32 {
-        self.addr.into()
+impl From<Tile> for u32 {
+    fn from(val: Tile) -> Self {
+        val.addr.into()
     }
 }
 
@@ -107,6 +107,7 @@ pub fn allocate_tlb(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn noc_write(
     device: &mut PciDevice,
     tlb: &PossibleTlbAllocation,
@@ -133,6 +134,7 @@ pub fn noc_write(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn noc_read(
     device: &mut PciDevice,
     tlb: &PossibleTlbAllocation,
@@ -159,6 +161,7 @@ pub fn noc_read(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn noc_write32(
     device: &mut PciDevice,
     tlb: &PossibleTlbAllocation,
@@ -209,6 +212,7 @@ pub fn noc_read32(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn noc_multicast(
     device: &mut PciDevice,
     tlb: &PossibleTlbAllocation,
@@ -238,6 +242,7 @@ pub fn noc_multicast(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn noc_multicast32(
     device: &mut PciDevice,
     tlb: &PossibleTlbAllocation,
