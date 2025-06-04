@@ -84,14 +84,24 @@ impl Tile {
 
 pub fn allocate_tlb(
     device: &mut PciDevice,
-    mut size: u64,
+    start_small: bool,
 ) -> Result<PossibleTlbAllocation, PciError> {
     if device.driver_version > 1 {
-        while size > 0 {
+        let tlb_info = luwen::ttkmd_if::tlb::get_tlb_info(device);
+        let mut sizes = std::collections::HashSet::new();
+        for config in tlb_info.tlb_config {
+            sizes.insert(config.size);
+        }
+        let mut sizes = sizes.into_iter().collect::<Vec<_>>();
+        sizes.sort();
+        if !start_small {
+            sizes.reverse();
+        }
+
+        for size in sizes {
             if let Ok(tlb) = device.allocate_tlb(size) {
                 return Ok(PossibleTlbAllocation::Allocation(tlb));
             }
-            size >>= 1;
         }
 
         tracing::warn!("Failed to allocate a tlb, falling back to fixed default");

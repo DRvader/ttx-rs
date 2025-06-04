@@ -19,8 +19,7 @@ pub struct Wormhole {
 
 impl Wormhole {
     pub fn init(mut device: PciDevice) -> Result<Self, String> {
-        let size = 1 << 24;
-        let tlb_index = super::noc::allocate_tlb(&mut device, size).map_err(|v| v.to_string())?;
+        let tlb_index = super::noc::allocate_tlb(&mut device, false).map_err(|v| v.to_string())?;
 
         let noc = PciNoc {
             device,

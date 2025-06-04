@@ -30,8 +30,7 @@ pub enum BlackholeError {
 
 impl Blackhole {
     pub fn init(mut device: PciDevice) -> Result<Self, BlackholeError> {
-        let size = 1 << 24;
-        let tlb_index = super::noc::allocate_tlb(&mut device, size)?;
+        let tlb_index = super::noc::allocate_tlb(&mut device, false)?;
 
         let mut noc = PciNoc {
             device,
