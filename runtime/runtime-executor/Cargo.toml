@@ -1,0 +1,21 @@
+[package]
+name = "runtime-executor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ttx-rs = { path = "../../" }
+
+runtime-shared = { path = "../runtime-shared" }
+
+tracing = { workspace = true }
+goblin = { workspace = true }
+postcard = { workspace = true, features = ["alloc"] }
+serde = { workspace = true }
+
+tempfile = "3.20.0"
+uuid = { version = "1.17.0", features = ["v4"] }
+
+[dev-dependencies]
+ctor = "0.4.2"
+tracing-subscriber = {version = "0.3.19", features = ["env-filter"]}

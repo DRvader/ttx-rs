@@ -8,13 +8,30 @@ luwen = {path = "../luwen"}
 tensix-builder = {path = "./tensix-builder"}
 macros = {path = "./macros"}
 
-goblin = "0.8.2"
-tracing = "0.1.41"
+tracing = { workspace = true }
+
+goblin = { workspace = true }
 thiserror = "2.0.9"
+
+serde = { workspace = true, features = ["std"] }
+
 num-derive = "0.4.2"
 num-traits = "0.2.19"
+
 tempfile = "3.20.0"
 
 [dev-dependencies]
 tracing-subscriber = {version = "0.3.19", features = ["env-filter"]}
 ctor = "0.4.2"
+
+[workspace]
+members = [
+    "runtime/runtime-executor",
+    "runtime/runtime-shared",
+]
+
+[workspace.dependencies]
+postcard = "1.1.1"
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+goblin = "0.8.2"
+tracing = "0.1.41"

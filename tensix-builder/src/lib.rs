@@ -96,6 +96,7 @@ impl CargoProfile {
     }
 }
 
+#[derive(Clone)]
 pub enum CacheEnable {
     CustomDir(PathBuf),
     Enabled,
@@ -118,7 +119,7 @@ pub struct CargoOptions {
 // Check if we might be running inside a cargo invocation.
 // Will assume that this is true if we can invoke `cargo metadata`
 // If we just append /tensix-builder to it to avoid a deadlock
-fn get_target_dir() -> Option<PathBuf> {
+pub fn get_target_dir() -> Option<PathBuf> {
     if let Ok(metadata) = cargo_metadata::MetadataCommand::new().exec() {
         Some(metadata.target_directory.as_std_path().to_path_buf())
     } else {
@@ -186,15 +187,33 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
         ),
     ]);
 
-    let dir = tempfile::tempdir().unwrap();
     let target = options.target.to_string();
+
+    let target_dir = get_target_dir().unwrap_or_else(|| {
+        <PathBuf as std::str::FromStr>::from_str("target")
+            .expect("could not create path from static const")
+    });
+    let kernel_target_dir = target_dir.join(format!("tensix-builder/{}", options.kernel_name));
+    let kernel_target_cache_dir =
+        target_dir.join(format!("tensix-builder/cache/link/{}", options.kernel_name));
+    std::fs::create_dir_all(&kernel_target_cache_dir).expect("to be able to create directory");
 
     let mut linker_path = None;
 
     let target_def_file = match options.target {
         TensixTarget::Standard(standard_target) => {
-            let file = dir.path().join(format!("{target}.json"));
-            std::fs::write(&file, target_map[standard_target.to_string().as_str()]).unwrap();
+            let file = kernel_target_cache_dir.join(format!("{target}.json"));
+            let contents = target_map[standard_target.to_string().as_str()];
+            let mut overwrite = true;
+            if let Ok(existing) = std::fs::read(&file) {
+                if existing == contents {
+                    overwrite = false;
+                }
+            }
+
+            if overwrite {
+                std::fs::write(&file, contents).unwrap();
+            }
 
             file
         }
@@ -254,22 +273,47 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
                     // println!("{index}: {line}");
                     // }
 
-                    let file = dir.path().join(format!("{name}.json"));
-                    std::fs::write(&file, target_json).unwrap();
+                    let file = kernel_target_cache_dir.join(format!("{name}.json"));
+                    let mut overwrite = true;
+                    if let Ok(existing) = std::fs::read(&file) {
+                        if existing == target_json.as_bytes() {
+                            overwrite = false;
+                        }
+                    }
+                    if overwrite {
+                        std::fs::write(&file, target_json).unwrap();
+                    }
 
                     file
                 }
                 StandardTargetOrCustom::Custom(c) => {
-                    let file = dir.path().join(format!("{name}.json"));
-                    std::fs::write(&file, c).unwrap();
+                    let file = kernel_target_cache_dir.join(format!("{name}.json"));
+                    let mut overwrite = true;
+                    if let Ok(existing) = std::fs::read(&file) {
+                        if existing == c.as_bytes() {
+                            overwrite = false;
+                        }
+                    }
+                    if overwrite {
+                        std::fs::write(&file, c).unwrap();
+                    }
 
                     file
                 }
             };
 
-            let link_file = dir.path().join(format!("{name}.x"));
-            std::fs::write(&link_file, linker_script).unwrap();
-            linker_path = Some(dir.path());
+            let link_file = kernel_target_cache_dir.join(format!("{name}.x"));
+            let mut overwrite = true;
+            if let Ok(existing) = std::fs::read(&link_file) {
+                if existing == linker_script.as_bytes() {
+                    overwrite = false;
+                }
+            }
+            if overwrite {
+                std::fs::write(&link_file, linker_script).unwrap();
+            }
+
+            linker_path = Some(kernel_target_cache_dir);
 
             file
         }
@@ -301,14 +345,7 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
         cargo.arg("--no-default-features");
     }
 
-    if let Some(target) = get_target_dir() {
-        cargo.args([
-            "--target-dir",
-            &target
-                .join(format!("tensix-builder/{}", options.kernel_name))
-                .to_string_lossy(),
-        ]);
-    }
+    cargo.args(["--target-dir", &kernel_target_dir.to_string_lossy()]);
 
     let mut kernel_name = options.kernel_name;
     if !kernel_name.starts_with('"') || !kernel_name.ends_with('"') {

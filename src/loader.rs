@@ -1,7 +1,8 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use goblin::elf::program_header;
+use goblin::elf::{program_header, Reloc};
 use luwen::luwen_core::Arch;
+use serde::{Deserialize, Serialize};
 use tensix_builder::{CacheEnable, Rewrite};
 
 use crate::{
@@ -105,6 +106,36 @@ pub fn stop<T: Into<NocAddress>>(device: &mut Chip, core: T) {
     );
 }
 
+/// The value to substitute on the right side of the
+/// relocation operation
+#[derive(Clone, Serialize, Deserialize)]
+pub enum RelocationRead {
+    /// Instead of reading substitute the loaded binary base
+    Base,
+    /// Perform a relocation based on the symbol value
+    /// This implies that the symbol value should have the loaded base
+    /// added
+    SymbolValue32(u32),
+    /// Offset from the loaded base to read from
+    Offset(u64),
+}
+
+/// We only support loading self contained kernels and no direct communication
+/// between the dynamic file and the firmware.
+/// We also load all sections as a single block
+/// This means that we, in advance, know where symbols where be located relative to a global base
+#[derive(Clone, Serialize, Deserialize)]
+pub struct KernelRelocation {
+    /// The name of the symbol which is being reallocated
+    pub name: Option<String>,
+    /// The offset relative to the bottom of the binary where the write needs to happen
+    pub write_offset: u64,
+    /// The offset relative to the bottom of the binary where the read needs to happen
+    pub read_offset: RelocationRead,
+    /// A constant value to add to the result of the read
+    pub addend: i64,
+}
+
 fn load_elf(elf: &[u8]) -> KernelData {
     let bin = goblin::elf::Elf::parse(elf).unwrap();
 
@@ -129,6 +160,62 @@ fn load_elf(elf: &[u8]) -> KernelData {
         if let Some(name) = bin.strtab.get_at(sym.st_name) {
             sym_table.insert(name, sym.st_value);
         }
+    }
+
+    let mut relocations = Vec::new();
+
+    // The following notation is used to describe relocation computations specific to x86_64 ELF.
+    // A: The addend used to compute the value of the relocatable field.
+    // B: The base address at which a shared object is loaded into memory during execution. Generally, a shared object file is built with a base virtual address of 0. However, the execution address of the shared object is different.
+    // G: The offset into the global offset table at which the address of the relocation entry’s symbol resides during execution.
+    // GOT: The address of the global offset table.
+    // L: The section offset or address of the procedure linkage table entry for a symbol.
+    // P: The section offset or address of the storage unit being relocated, computed using r_offset.
+    // S: The value of the symbol whose index resides in the relocation entry.
+    // Z: The size of the symbol whose index resides in the relocation entry.
+    // Here we use the dynstrtab for resolving the symbols, this is just a subset of the full
+    // symbol table. So it's safe to assume that I can perform relocations against my full symbol table
+    let mut process_reloc = |reloc: Reloc| {
+        let sym = bin
+            .dynsyms
+            .get(reloc.r_sym)
+            .and_then(|v| bin.dynstrtab.get_at(v.st_name).map(|v| v.to_string()));
+
+        match reloc.r_type {
+            // Runtime relocation: word32,64 = B + A
+            goblin::elf::reloc::R_RISCV_RELATIVE => {
+                relocations.push(KernelRelocation {
+                    name: sym,
+                    write_offset: reloc.r_offset,
+                    read_offset: RelocationRead::Base,
+                    addend: reloc.r_addend.unwrap_or(0),
+                });
+            }
+            // Runtime relocation: word32 = S + A
+            goblin::elf::reloc::R_RISCV_32 => {
+                relocations.push(KernelRelocation {
+                    name: sym,
+                    write_offset: reloc.r_offset,
+                    read_offset: RelocationRead::SymbolValue32(
+                        bin.dynsyms.get(reloc.r_sym).unwrap().st_value as u32,
+                    ),
+                    addend: reloc.r_addend.unwrap_or(0),
+                });
+            }
+            ty => unimplemented!("Do not have a handler for the relocation {ty}"),
+        }
+    };
+
+    for reloc in bin.dynrels.iter() {
+        process_reloc(reloc);
+    }
+
+    for reloc in bin.dynrelas.iter() {
+        process_reloc(reloc);
+    }
+
+    for reloc in bin.pltrelocs.iter() {
+        process_reloc(reloc);
     }
 
     let bin_data = KernelBinData {
@@ -182,6 +269,7 @@ fn load_elf(elf: &[u8]) -> KernelData {
             .map(|v| (v.0.to_string(), v.1))
             .collect(),
         writes,
+        relocations,
     }
 }
 
@@ -238,36 +326,69 @@ pub fn load_file_to_core(device: Chip, noc_id: NocId, core: Tile, kernel: PathBu
     load_to_core(device, noc_id, core, &kernel)
 }
 
-pub struct LoadOptions {
-    pub no_wait: bool,
+#[derive(Hash, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BuildOptions {
     pub build_std: bool,
-    pub verbose: bool,
     pub lto: bool,
-    pub use_cache: tensix_builder::CacheEnable,
-    pub base_path: PathBuf,
-    pub path: String,
     pub profile: String,
     pub default_features: bool,
     pub stack_probes: bool,
+}
+
+pub struct LoadOptions {
+    pub no_wait: bool,
+    pub verbose: bool,
+    pub use_cache: tensix_builder::CacheEnable,
+    pub path: String,
+    pub base_path: PathBuf,
     pub hide_output: bool,
     pub noc_id: NocId,
+
+    pub build_options: BuildOptions,
 }
 
 impl LoadOptions {
-    pub fn new(base_path: &std::path::Path) -> Self {
+    pub fn new_without_base() -> Self {
         Self {
-            no_wait: false,
-            build_std: false,
+            hide_output: false,
             verbose: false,
             use_cache: CacheEnable::Disabled,
-            lto: false,
+
+            base_path: PathBuf::default(),
+            path: String::new(),
+
+            no_wait: false,
+            noc_id: NocId::Noc0,
+
+            build_options: BuildOptions {
+                lto: false,
+                build_std: false,
+                profile: "release".to_string(),
+                default_features: true,
+                stack_probes: false,
+            },
+        }
+    }
+
+    pub fn new(base_path: &std::path::Path) -> Self {
+        Self {
+            hide_output: false,
+            verbose: false,
+            use_cache: CacheEnable::Disabled,
+
             base_path: base_path.to_path_buf(),
             path: String::new(),
-            profile: "release".to_string(),
-            default_features: true,
-            stack_probes: false,
-            hide_output: false,
+
+            no_wait: false,
             noc_id: NocId::Noc0,
+
+            build_options: BuildOptions {
+                lto: false,
+                build_std: false,
+                profile: "release".to_string(),
+                default_features: true,
+                stack_probes: false,
+            },
         }
     }
 }
@@ -284,7 +405,7 @@ impl LoadOptions {
     }
 
     pub fn build_std(mut self, build_std: bool) -> Self {
-        self.build_std = build_std;
+        self.build_options.build_std = build_std;
         self
     }
 
@@ -299,7 +420,7 @@ impl LoadOptions {
     }
 
     pub fn lto(mut self, lto: bool) -> Self {
-        self.lto = lto;
+        self.build_options.lto = lto;
         self
     }
 
@@ -317,17 +438,17 @@ impl LoadOptions {
     }
 
     pub fn profile(mut self, profile: &str) -> Self {
-        self.profile = profile.to_string();
+        self.build_options.profile = profile.to_string();
         self
     }
 
     pub fn default_features(mut self, df: bool) -> Self {
-        self.default_features = df;
+        self.build_options.default_features = df;
         self
     }
 
     pub fn stack_probes(mut self, probe: bool) -> Self {
-        self.stack_probes = probe;
+        self.build_options.stack_probes = probe;
         self
     }
 
@@ -337,12 +458,12 @@ impl LoadOptions {
     }
 }
 
-pub fn build_kernel(
+pub fn build_kernel_elf(
     name: &str,
     arch: Arch,
     options: LoadOptions,
     custom_link: Option<(String, Vec<Rewrite>)>,
-) -> KernelData {
+) -> (KernelData, Vec<u8>) {
     let arch = match arch {
         luwen::luwen_core::Arch::Grayskull => tensix_builder::StandardTarget::Grayskull,
         luwen::luwen_core::Arch::Wormhole => tensix_builder::StandardTarget::Wormhole,
@@ -360,7 +481,7 @@ pub fn build_kernel(
         tensix_builder::TensixTarget::Standard(arch)
     };
 
-    let profile = match options.profile.as_str() {
+    let profile = match options.build_options.profile.as_str() {
         "debug" => tensix_builder::CargoProfile::Debug,
         "release" => tensix_builder::CargoProfile::Release,
         other => tensix_builder::CargoProfile::Other(other.to_string()),
@@ -375,19 +496,28 @@ pub fn build_kernel(
         tensix_builder::CargoOptions {
             target: arch.clone(),
             profile,
-            lto: options.lto,
+            lto: options.build_options.lto,
             use_cache: options.use_cache,
             verbose: options.verbose,
-            build_std: options.build_std,
-            default_features: options.default_features,
-            stack_probes: options.stack_probes,
+            build_std: options.build_options.build_std,
+            default_features: options.build_options.default_features,
+            stack_probes: options.build_options.stack_probes,
             kernel_name: name.to_string(),
             hide_output: options.hide_output,
         },
     );
 
     let elf = std::fs::read(kernel.path).unwrap();
-    load_elf(&elf)
+    (load_elf(&elf), elf)
+}
+
+pub fn build_kernel(
+    name: &str,
+    arch: Arch,
+    options: LoadOptions,
+    custom_link: Option<(String, Vec<Rewrite>)>,
+) -> KernelData {
+    build_kernel_elf(name, arch, options, custom_link).0
 }
 
 pub fn quick_load(name: &str, mut device: Chip, core: Tile, options: LoadOptions) -> Kernel {
@@ -398,7 +528,7 @@ pub fn quick_load(name: &str, mut device: Chip, core: Tile, options: LoadOptions
         luwen::luwen_core::Arch::Unknown(_) => todo!(),
     };
 
-    let profile = match options.profile.as_str() {
+    let profile = match options.build_options.profile.as_str() {
         "debug" => tensix_builder::CargoProfile::Debug,
         "release" => tensix_builder::CargoProfile::Release,
         other => tensix_builder::CargoProfile::Other(other.to_string()),
@@ -413,12 +543,12 @@ pub fn quick_load(name: &str, mut device: Chip, core: Tile, options: LoadOptions
         tensix_builder::CargoOptions {
             target: tensix_builder::TensixTarget::Standard(arch.clone()),
             profile,
-            lto: options.lto,
+            lto: options.build_options.lto,
             use_cache: options.use_cache,
             verbose: options.verbose,
-            build_std: options.build_std,
-            default_features: options.default_features,
-            stack_probes: options.stack_probes,
+            build_std: options.build_options.build_std,
+            default_features: options.build_options.default_features,
+            stack_probes: options.build_options.stack_probes,
             kernel_name: name.to_string(),
             hide_output: options.hide_output,
         },

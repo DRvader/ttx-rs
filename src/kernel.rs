@@ -1,15 +1,18 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     chip::noc::{NocAddress, NocId, NocInterface, Tile},
+    loader::KernelRelocation,
     Chip,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 #[repr(align(16))]
 pub struct Alignment16(pub Box<[u8]>);
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct KernelBytes {
     pub addr: u32,
     pub data: Alignment16,
@@ -25,7 +28,7 @@ impl KernelBytes {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct CoreData {
     pub panic: Option<u64>,
     pub entry: Option<u64>,
@@ -33,7 +36,7 @@ pub struct CoreData {
     pub postcode: Option<u64>,
 }
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PerCoreCache {
     name: String,
     state: Option<u32>,
@@ -41,14 +44,14 @@ pub struct PerCoreCache {
     panic_data: Option<PanicData>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct CoreDataCache {
     sync: Option<u32>,
     core_data: Vec<PerCoreCache>,
     panic_data: Option<PanicData>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct KernelBinData {
     pub start_sync: Option<u64>,
     pub brisc_state: CoreData,
@@ -290,11 +293,12 @@ impl KernelBinData {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct KernelData {
     pub sym_table: HashMap<String, u64>,
     pub writes: Vec<KernelBytes>,
     pub bin: KernelBinData,
+    pub relocations: Vec<KernelRelocation>,
 }
 
 impl<S: AsRef<str>> std::ops::Index<S> for KernelData {
@@ -342,6 +346,23 @@ impl KernelData {
             chip.noc_read(noc_id, tile, write.addr as u64, &mut readback_data);
             debug_assert_eq!(readback_data.as_slice(), write.data.0.as_ref());
         }
+
+        for relocation in &self.relocations {
+            let value = match relocation.read_offset {
+                crate::loader::RelocationRead::Base => 0,
+                // The loaded offset is 0
+                crate::loader::RelocationRead::SymbolValue32(value) => value,
+                crate::loader::RelocationRead::Offset(offset) => {
+                    chip.noc_read32(noc_id, tile, offset)
+                }
+            };
+            chip.noc_write32(
+                noc_id,
+                tile,
+                relocation.write_offset,
+                (value as i64 + relocation.addend) as u32,
+            );
+        }
     }
 
     pub fn load_all(&self, chip: &mut Chip, noc_id: NocId) {
@@ -372,6 +393,22 @@ impl KernelData {
                 );
                 debug_assert_eq!(readback_data.as_slice(), write.data.0.as_ref());
             }
+        }
+
+        for relocation in &self.relocations {
+            let value = match relocation.read_offset {
+                crate::loader::RelocationRead::Base => 0,
+                // The loaded offset is 0
+                crate::loader::RelocationRead::SymbolValue32(value) => value,
+                crate::loader::RelocationRead::Offset(offset) => {
+                    chip.noc_read32(noc_id, chip.tensix(0), offset)
+                }
+            };
+            chip.noc_broadcast32(
+                noc_id,
+                relocation.write_offset,
+                (value as i64 + relocation.addend) as u32,
+            );
         }
     }
 
@@ -473,7 +510,7 @@ impl Kernel {
 
 // TODO(drosen): This should be a shared definition
 #[repr(C)]
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct PanicData {
     pub filename_addr: u32,
     pub filename_len: u32,

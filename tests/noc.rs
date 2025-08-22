@@ -824,7 +824,7 @@ fn generate_tenisx_noc_test(
 
                         set_pc(0x4);
 
-                        assert_eq!(&*VALUE_BUFFER.get(), &(*READBACK_BUFFER.get())[..VALUE_LENGTH], "Failed to correctly readback from DRAM with correct alignment");
+                        assert_eq!(&*VALUE_BUFFER.get(), &(&(*READBACK_BUFFER.get()))[..VALUE_LENGTH], "Failed to correctly readback from DRAM with correct alignment");
 
                         set_pc(0x5);
 
@@ -867,8 +867,8 @@ fn generate_tenisx_noc_test(
                                 true,
                             );
 
-                            let expected = &(*VALUE_BUFFER.get())[offset..];
-                            let readback = &(*READBACK_BUFFER.get())[..(VALUE_LENGTH - offset)];
+                            let expected = &(*VALUE_BUFFER.get()).as_slice()[offset..];
+                            let readback = &(*READBACK_BUFFER.get()).as_slice()[..(VALUE_LENGTH - offset)];
 
                             if alignment >= align_read as u64 {{
                                 ever_checked_eq = true;
@@ -932,8 +932,8 @@ fn generate_tenisx_noc_test(
                                 true,
                             );
 
-                            let expected = &(*VALUE_BUFFER.get());
-                            let readback = &(*READBACK_BUFFER.get())[offset..(VALUE_LENGTH + offset)];
+                            let expected = (*VALUE_BUFFER.get()).as_slice();
+                            let readback = &((*READBACK_BUFFER.get()).as_slice()[offset..(VALUE_LENGTH + offset)]);
 
                             if alignment >= align_write as u64 {{
                                 ever_checked_eq = true;

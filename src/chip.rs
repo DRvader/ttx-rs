@@ -378,16 +378,17 @@ impl Chip {
                     tile
                 );
 
-                if let Some(id) = data.sym_table.get("CORE_ID") {
-                    self.noc_write32(noc::NocId::Noc1, *tile, *id, core_id as u32);
-                }
-
                 data.bin.print_state(self, noc::NocId::Noc1, tile.addr);
                 while !data.bin.start_sync(self, noc::NocId::Noc1, tile.addr) {
                     if !data.bin.all_complete(self, noc::NocId::Noc1, tile.addr) {
                         data.bin.print_state_diff(self, noc::NocId::Noc1, tile.addr);
                     }
                     std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+
+                if let Some(id) = data.sym_table.get("CORE_ID") {
+                    tracing::trace!("{}: writing CORE_ID {} to {:?}", self, core_id, tile);
+                    self.noc_write32(noc::NocId::Noc1, *tile, *id, core_id as u32);
                 }
 
                 tracing::trace!("{}[{}]: fw started on {:?}", self.arch(), self.id(), tile);
