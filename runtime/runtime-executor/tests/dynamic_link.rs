@@ -101,8 +101,12 @@ fn dynamic_load_dram_pull() {
 
         builder.brisc = format!(
             r#"
+            // Signal that the buffers are ready for being interacted with
+            make_buffers_valid();
+
             // Blocks until flushed
             buffer_push(smallest_read_for_{smallest_function}, &{sync_data}, &{sync_write}, &0xfacau32.to_le_bytes());
+            {sync_write}.write(4);
             // Blocks until buffer is flushed
             buffer_complete(smallest_read_for_{smallest_function}, &{sync_write}, &{sync_flush});
             "#,
@@ -117,6 +121,11 @@ fn dynamic_load_dram_pull() {
         info!("COMPILED");
 
         let workload = firmware.queue_workload(&mut chip, workload, vec![buffer]);
+
+        let valid = chip.noc_read32(ttx_rs::chip::noc::NocId::Noc1, workload.tile, workload.data("BUFFERS_VALID"));
+        tracing::info!("{:x}", valid);
+
+        // workload.wait_buffers_valid(&mut chip);
 
         let data = workload.empty_output(&mut chip, &slot);
         let data = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);

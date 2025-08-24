@@ -64,6 +64,8 @@ impl QueuedWorkload {
         let read = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_read()));
         let write = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_write()));
 
+        tracing::info!("write {write:x} read {read:x}");
+
         let count_to_read = if write >= read {
             write as usize - read as usize
         } else {
@@ -114,12 +116,27 @@ impl QueuedWorkload {
         let old_lauchend = 0;
 
         // Exit when flushed is true
-        while !(chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_flushed())) != 0) {
+        loop {
+            let flushed =
+                chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_flushed())) != 0;
             output.extend_from_slice(&self.pull_output(chip, slot));
+
+            if flushed {
+                break;
+            }
         }
-        output.extend_from_slice(&self.pull_output(chip, slot));
 
         output.into_boxed_slice()
+    }
+
+    pub fn wait_buffers_valid(&self, chip: &mut ttx_rs::Chip) {
+        loop {
+            let buffers_valid =
+                chip.noc_read32(NocId::Noc1, self.tile, self.data("BUFFERS_VALID")) != 0;
+            if buffers_valid {
+                break;
+            }
+        }
     }
 }
 
@@ -212,8 +229,8 @@ impl DramPullFirmware {
 
         let mut kernel_launch_data = LaunchData {
             workload_bank: (
-                chip.dram(kernel_allocation.dram_bank)[0].addr.n1.0,
-                chip.dram(kernel_allocation.dram_bank)[0].addr.n1.1,
+                chip.dram(kernel_allocation.dram_bank)[0].addr.n0.0,
+                chip.dram(kernel_allocation.dram_bank)[0].addr.n0.1,
             ),
             workload_bank_offset: kernel_allocation.offset,
             workload_bank_size: workload_binary.len() as u64,
@@ -275,15 +292,22 @@ impl DramPullFirmware {
                         NocId::Noc1,
                         tensix,
                         job_ready.job_request_addr,
-                        &[vec![1u8], postcard::to_allocvec(&kernel_launch_data).unwrap()].concat(),
+                        &[
+                            vec![1u8],
+                            postcard::to_allocvec(&kernel_launch_data).unwrap(),
+                        ]
+                        .concat(),
                     );
                     break 'inf_loop (tensix, job_ready.job_offset);
                 }
             }
         };
 
-        let value = chip.noc_read32(NocId::Noc1, loaded_tensix, self.data["JOB_LAUNCHED"]);
-        tracing::debug!("{tensix:?}: hi {value:x}", tensix = loaded_tensix);
+        let mut value = 0;
+        while value != 201 {
+            value = chip.noc_read32(NocId::Noc1, loaded_tensix, self.data["JOB_LAUNCHED"]);
+            tracing::debug!("{tensix:?}: hi {value:x}", tensix = loaded_tensix);
+        }
 
         self.data
             .bin
@@ -658,12 +682,13 @@ pub fn write_main(
             unsafe {{
                 JOB_LAUNCHED.write(23);
 
-                let open_slot = (dyn_base() + ((tensix_std::target::noc_map::ALIGNMENT_DRAM_READ as u32) - 1)) & !((tensix_std::target::noc_map::ALIGNMENT_DRAM_READ as u32) - 1);
-                *NEXT_JOB_SLOT.get() = open_slot as u64;
+                let alignment = tensix_std::target::noc_map::ALIGNMENT_DRAM_READ as u32;
+                let open_slot = (dyn_base() + (alignment - 1)) & !(alignment - 1);
+                NEXT_JOB_SLOT.write(open_slot as u64);
 
                 let launch_request = Some(runtime_shared::LaunchRequest {{
                     job_request_addr: (&raw const JOB_INFO) as u64,
-                    job_offset: *NEXT_JOB_SLOT.get(),
+                    job_offset: NEXT_JOB_SLOT.read(),
                 }});
 
                 let to_write = postcard::to_slice(&launch_request, (*LAUNCH_REQUEST.get()).as_mut_slice()).unwrap();
@@ -682,7 +707,7 @@ pub fn write_main(
 
                 while (&raw mut JOB_INFO[0]).read_volatile() == 0 {{}}
 
-                JOB_LAUNCHED.write(4);
+                JOB_LAUNCHED.write(33);
 
                 let output = postcard::from_bytes(&JOB_INFO[1..]).unwrap();
                 (&raw mut JOB_INFO[0]).write_volatile(0);
@@ -703,7 +728,7 @@ pub fn write_main(
                         y_end: job.workload_bank.1,
                         ..Default::default()
                     }},
-                    core::slice::from_raw_parts_mut((*NEXT_JOB_SLOT.get()) as *mut u8, job.workload_bank_size as usize),
+                    core::slice::from_raw_parts_mut(NEXT_JOB_SLOT.read() as *mut u8, job.workload_bank_size as usize),
                     true
                 );
             }}
@@ -784,7 +809,7 @@ pub fn write_main(
 
                     let job = request_job();
 
-                    JOB_LAUNCHED.write(job.workload_bank_size as u32);
+                    JOB_LAUNCHED.write(2);
 
                     load_job(&job);
 
@@ -797,7 +822,7 @@ pub fn write_main(
 
                     JOB_LAUNCHED.write(102);
 
-                    let binary_addr = (*NEXT_JOB_SLOT.get()) as *mut u8;
+                    let binary_addr = NEXT_JOB_SLOT.read() as *mut u8;
 
                     let relocation_addr = (binary_addr as u32) + job.kernel_size as u32;
                     let num_relocations = (relocation_addr as *const u64).read_volatile();
@@ -806,7 +831,6 @@ pub fn write_main(
 
                     JOB_LAUNCHED.write(103);
 
-                    let binary = core::slice::from_raw_parts_mut(binary_addr, job.kernel_size as usize);
                     let mut relocations = core::slice::from_raw_parts(
                         relocation_addr,
                         num_relocations as usize * relocate::KernelRelocation::POSTCARD_MAX_SIZE
@@ -814,17 +838,20 @@ pub fn write_main(
 
                     let base_addr = binary_addr as u32;
 
-                    JOB_LAUNCHED.write(num_relocations as u32);
-
-                    // Perform relocations
-                    for _ in 0..num_relocations {{
-                        let (relocation, relocations) = postcard::take_from_bytes::<relocate::KernelRelocation>(relocations).unwrap();
-                        relocation.relocate_binary(base_addr as u64, binary);
-                    }}
+                    JOB_LAUNCHED.write(0x104);
 
                     // Zero BSS
                     for addr in job.bss..job.ebss {{
                         *((base_addr + addr) as *mut u32) = 0;
+                    }}
+
+                    JOB_LAUNCHED.write(0x105);
+
+                    // Perform relocations
+                    for i in 0..num_relocations {{
+                        JOB_LAUNCHED.write(0x104 + i as u32);
+                        let (relocation, relocations) = postcard::take_from_bytes::<relocate::KernelRelocation>(relocations).unwrap();
+                        relocation.relocate_ptr(base_addr as u64, binary_addr);
                     }}
 
                     JOB_LAUNCHED.write(200);
@@ -834,9 +861,11 @@ pub fn write_main(
                     TRISC1_JOB_POINTER.write(Some((base_addr, job.trisc1)));
                     TRISC2_JOB_POINTER.write(Some((base_addr, job.trisc2)));
 
+                    JOB_LAUNCHED.write(201);
+
                     jump_to(base_addr, job.brisc.entry, job.brisc.stack);
 
-                    JOB_LAUNCHED.write(201);
+                    JOB_LAUNCHED.write(202);
 
                     loop {{
                         if NCRISC_JOB_RESULT.read().is_none() {{

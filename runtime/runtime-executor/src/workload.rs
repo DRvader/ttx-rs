@@ -158,7 +158,7 @@ impl WorkloadBuilder {
             self.global.push_str(&format!(
                 r#"
             #[unsafe(no_mangle)]
-            static {name}: SYNC<u32> = SYNC::new(0);
+            static {name}: SYNC<u32> = SYNC::new(false as u8 as u32);
           "#
             ));
         }
@@ -446,6 +446,13 @@ impl Workload {
                     n1: ((value >> 16) as u8, (value >> 24) as u8)
                 }}
             }}
+        }}
+
+        #[unsafe(no_mangle)]
+        static BUFFERS_VALID: SYNC<u32> = SYNC::new(false as u8 as u32);
+
+        fn make_buffers_valid() {{
+            BUFFERS_VALID.write(true as u8 as u32);
         }}
 
         fn buffer_count(write: u32, read: u32, size: u32) -> u32 {{

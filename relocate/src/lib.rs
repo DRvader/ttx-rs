@@ -32,6 +32,34 @@ pub struct KernelRelocation {
 }
 
 impl KernelRelocation {
+    pub unsafe fn relocate_ptr(&self, base_addr: u64, mut binary: *mut u8) {
+        self.relocate(
+            &mut binary,
+            base_addr,
+            |binary, addr| {
+                let read_value = unsafe { binary.add(addr) };
+                unsafe {
+                    u32::from_le_bytes([
+                        read_value.read_volatile(),
+                        read_value.add(1).read_volatile(),
+                        read_value.add(2).read_volatile(),
+                        read_value.add(3).read_volatile(),
+                    ])
+                }
+            },
+            |binary, addr, value| {
+                let write_loc = unsafe { binary.add(addr) };
+
+                unsafe {
+                    write_loc.write_volatile(value[0]);
+                    write_loc.add(1).write_volatile(value[1]);
+                    write_loc.add(2).write_volatile(value[2]);
+                    write_loc.add(3).write_volatile(value[3]);
+                }
+            },
+        )
+    }
+
     pub fn relocate_binary(&self, base_addr: u64, binary: &mut [u8]) {
         self.relocate(
             binary,
