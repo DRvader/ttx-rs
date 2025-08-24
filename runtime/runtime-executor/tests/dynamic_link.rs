@@ -29,7 +29,7 @@ fn load_push_firmware(chip: &mut Chip) -> PushFirmware {
 }
 
 #[test]
-fn quick_dynamic_load() {
+fn dynamic_load_push() {
     for chip in ttx_rs::chip::scan() {
         if chip.is_err() {
             continue;
@@ -43,7 +43,6 @@ fn quick_dynamic_load() {
             available_space: firmware.available_space(),
             global: "#[unsafe(no_mangle)]\nstatic VALUE: SYNC<u32> = SYNC::new(26);".to_string(),
             brisc: "VALUE.write(2); while VALUE.read() == 1 {}".to_string(),
-            ncrisc: "while VALUE.read() == 26 {}".to_string(),
             ..Default::default()
         };
 
@@ -89,26 +88,39 @@ fn dynamic_load_dram_pull() {
 
         let mut chip = chip.unwrap();
 
-        let need_job_request = chip.alloc_dma_aligned(64 * chip.tensix_count(), 64);
-
-        let paramters = DramPullFirmwareParameters {
-            job_server: chip.pcie(),
-            job_server_addr: chip.pcie_access(need_job_request.physical_address()),
-        };
+        let paramters = DramPullFirmwareParameters {};
         let mut firmware = load_dram_pull_firmware(&mut chip, paramters);
 
-        let builder = workload::WorkloadBuilder {
+        let mut builder = workload::WorkloadBuilder {
             available_space: firmware.available_space(),
-            global: "#[unsafe(no_mangle)]\nstatic VALUE: SYNC<u32> = SYNC::new(26);".to_string(),
-            brisc: "VALUE.write(2); while VALUE.read() == 1 {}".to_string(),
-            ncrisc: "while VALUE.read() == 26 {}".to_string(),
             ..Default::default()
         };
+
+        let buffer = builder.output_buffer("SYNC", 4, 1);
+        let slot = buffer.get_slot(0).unwrap();
+
+        builder.brisc = format!(
+            r#"
+            // Blocks until flushed
+            buffer_push(smallest_read_for_{smallest_function}, &{sync_data}, &{sync_write}, &0xfacau32.to_le_bytes());
+            // Blocks until buffer is flushed
+            buffer_complete(smallest_read_for_{smallest_function}, &{sync_write}, &{sync_flush});
+            "#,
+            sync_data = slot.symbol_data(),
+            sync_write = slot.symbol_write(),
+            smallest_function = slot.symbol_base(),
+            sync_flush = slot.symbol_flushed()
+        );
 
         let workload = builder.compile(chip.arch());
 
         info!("COMPILED");
 
-        firmware.queue_workload(&mut chip, workload, vec![], vec![]);
+        let workload = firmware.queue_workload(&mut chip, workload, vec![buffer]);
+
+        let data = workload.empty_output(&mut chip, &slot);
+        let data = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+
+        assert_eq!(data, 2);
     }
 }

@@ -1,14 +1,15 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use goblin::elf::{program_header, Reloc};
+use goblin::elf::{Reloc, program_header};
 use luwen::luwen_core::Arch;
+use relocate::{KernelRelocation, RelocationRead};
 use serde::{Deserialize, Serialize};
 use tensix_builder::{CacheEnable, Rewrite};
 
 use crate::{
     chip::{
-        noc::{NocAddress, NocId, NocInterface, Tile},
         Chip,
+        noc::{NocAddress, NocId, NocInterface, Tile},
     },
     kernel::{Alignment16, CoreData, Kernel, KernelBinData, KernelBytes, KernelData},
 };
@@ -106,36 +107,6 @@ pub fn stop<T: Into<NocAddress>>(device: &mut Chip, core: T) {
     );
 }
 
-/// The value to substitute on the right side of the
-/// relocation operation
-#[derive(Clone, Serialize, Deserialize)]
-pub enum RelocationRead {
-    /// Instead of reading substitute the loaded binary base
-    Base,
-    /// Perform a relocation based on the symbol value
-    /// This implies that the symbol value should have the loaded base
-    /// added
-    SymbolValue32(u32),
-    /// Offset from the loaded base to read from
-    Offset(u64),
-}
-
-/// We only support loading self contained kernels and no direct communication
-/// between the dynamic file and the firmware.
-/// We also load all sections as a single block
-/// This means that we, in advance, know where symbols where be located relative to a global base
-#[derive(Clone, Serialize, Deserialize)]
-pub struct KernelRelocation {
-    /// The name of the symbol which is being reallocated
-    pub name: Option<String>,
-    /// The offset relative to the bottom of the binary where the write needs to happen
-    pub write_offset: u64,
-    /// The offset relative to the bottom of the binary where the read needs to happen
-    pub read_offset: RelocationRead,
-    /// A constant value to add to the result of the read
-    pub addend: i64,
-}
-
 fn load_elf(elf: &[u8]) -> KernelData {
     let bin = goblin::elf::Elf::parse(elf).unwrap();
 
@@ -176,25 +147,18 @@ fn load_elf(elf: &[u8]) -> KernelData {
     // Here we use the dynstrtab for resolving the symbols, this is just a subset of the full
     // symbol table. So it's safe to assume that I can perform relocations against my full symbol table
     let mut process_reloc = |reloc: Reloc| {
-        let sym = bin
-            .dynsyms
-            .get(reloc.r_sym)
-            .and_then(|v| bin.dynstrtab.get_at(v.st_name).map(|v| v.to_string()));
-
         match reloc.r_type {
             // Runtime relocation: word32,64 = B + A
             goblin::elf::reloc::R_RISCV_RELATIVE => {
                 relocations.push(KernelRelocation {
-                    name: sym,
                     write_offset: reloc.r_offset,
-                    read_offset: RelocationRead::Base,
+                    read_offset: RelocationRead::Base32,
                     addend: reloc.r_addend.unwrap_or(0),
                 });
             }
             // Runtime relocation: word32 = S + A
             goblin::elf::reloc::R_RISCV_32 => {
                 relocations.push(KernelRelocation {
-                    name: sym,
                     write_offset: reloc.r_offset,
                     read_offset: RelocationRead::SymbolValue32(
                         bin.dynsyms.get(reloc.r_sym).unwrap().st_value as u32,

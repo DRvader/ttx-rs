@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
+use relocate::KernelRelocation;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    chip::noc::{NocAddress, NocId, NocInterface, Tile},
-    loader::KernelRelocation,
     Chip,
+    chip::noc::{NocAddress, NocId, NocInterface, Tile},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -348,19 +348,13 @@ impl KernelData {
         }
 
         for relocation in &self.relocations {
-            let value = match relocation.read_offset {
-                crate::loader::RelocationRead::Base => 0,
-                // The loaded offset is 0
-                crate::loader::RelocationRead::SymbolValue32(value) => value,
-                crate::loader::RelocationRead::Offset(offset) => {
-                    chip.noc_read32(noc_id, tile, offset)
-                }
-            };
-            chip.noc_write32(
-                noc_id,
-                tile,
-                relocation.write_offset,
-                (value as i64 + relocation.addend) as u32,
+            relocation.relocate(
+                chip,
+                0,
+                |chip, addr| chip.noc_read32(noc_id, tile, addr as u64),
+                |chip, addr, value| {
+                    chip.noc_write32(noc_id, tile, addr as u64, u32::from_le_bytes(value));
+                },
             );
         }
     }
@@ -396,18 +390,13 @@ impl KernelData {
         }
 
         for relocation in &self.relocations {
-            let value = match relocation.read_offset {
-                crate::loader::RelocationRead::Base => 0,
-                // The loaded offset is 0
-                crate::loader::RelocationRead::SymbolValue32(value) => value,
-                crate::loader::RelocationRead::Offset(offset) => {
-                    chip.noc_read32(noc_id, chip.tensix(0), offset)
-                }
-            };
-            chip.noc_broadcast32(
-                noc_id,
-                relocation.write_offset,
-                (value as i64 + relocation.addend) as u32,
+            relocation.relocate(
+                chip,
+                0,
+                |chip, addr| chip.noc_read32(noc_id, chip.tensix(0), addr as u64),
+                |chip, addr, value| {
+                    chip.noc_broadcast32(noc_id, addr as u64, u32::from_le_bytes(value));
+                },
             );
         }
     }

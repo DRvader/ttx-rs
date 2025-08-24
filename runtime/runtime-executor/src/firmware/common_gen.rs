@@ -3,6 +3,7 @@ use std::path::PathBuf;
 pub fn write_cargo_toml() -> String {
     let path = env!("CARGO_MANIFEST_DIR").parse::<PathBuf>().unwrap();
     let shared_path = path.parent().unwrap().join("runtime-shared");
+    let relocate_path = path.parent().unwrap().parent().unwrap().join("relocate");
 
     format!(
         r#"
@@ -18,9 +19,11 @@ pub fn write_cargo_toml() -> String {
         tensix-std = {{path = "{}/../../../tensix-std"}}
         runtime-shared = {{path = "{}"}}
         postcard = "1.1.1"
+        relocate = {{path = "{}"}}
         "#,
         env!("CARGO_MANIFEST_DIR"),
-        shared_path.display()
+        shared_path.display(),
+        relocate_path.display()
     )
 }
 pub fn write_main(global: &str, brisc: &str) -> String {
@@ -150,7 +153,7 @@ pub fn write_main(global: &str, brisc: &str) -> String {
                 out(reg) old_sp,
             );
 
-            let mut old_sp_ref = &mut old_sp;
+            let old_sp_ref = &mut old_sp;
 
             core::arch::asm!(
                 "mv sp, {{0}}",
@@ -268,52 +271,44 @@ pub fn write_main(global: &str, brisc: &str) -> String {
 
     #[entry(ncrisc)]
     unsafe fn ncrisc_main() -> ! {{
-        unsafe {{
-            loop {{
-                if let Some((base, info)) = NCRISC_JOB_POINTER.read() {{
-                    NCRISC_JOB_POINTER.write(None);
-                    jump_to(base, info.entry, info.stack);
-                    NCRISC_JOB_RESULT.write(Some(()));
-                }}
+        loop {{
+            if let Some((base, info)) = NCRISC_JOB_POINTER.read() {{
+                NCRISC_JOB_POINTER.write(None);
+                jump_to(base, info.entry, info.stack);
+                NCRISC_JOB_RESULT.write(Some(()));
             }}
         }}
     }}
 
     #[entry(trisc0)]
     unsafe fn trisc0_main() -> ! {{
-        unsafe {{
-            loop {{
-                if let Some((base, info)) = TRISC0_JOB_POINTER.read() {{
-                    TRISC0_JOB_POINTER.write(None);
-                    jump_to(base, info.entry, info.stack);
-                    TRISC0_JOB_RESULT.write(Some(()));
-                }}
+        loop {{
+            if let Some((base, info)) = TRISC0_JOB_POINTER.read() {{
+                TRISC0_JOB_POINTER.write(None);
+                jump_to(base, info.entry, info.stack);
+                TRISC0_JOB_RESULT.write(Some(()));
             }}
         }}
     }}
 
     #[entry(trisc1)]
     unsafe fn trisc1_main() -> ! {{
-        unsafe {{
-            loop {{
-                if let Some((base, info)) = TRISC1_JOB_POINTER.read() {{
-                    TRISC1_JOB_POINTER.write(None);
-                    jump_to(base, info.entry, info.stack);
-                    TRISC1_JOB_RESULT.write(Some(()));
-                }}
+        loop {{
+            if let Some((base, info)) = TRISC1_JOB_POINTER.read() {{
+                TRISC1_JOB_POINTER.write(None);
+                jump_to(base, info.entry, info.stack);
+                TRISC1_JOB_RESULT.write(Some(()));
             }}
         }}
     }}
 
     #[entry(trisc2)]
     unsafe fn trisc2_main() -> ! {{
-        unsafe {{
-            loop {{
-                if let Some((base, info)) = TRISC2_JOB_POINTER.read() {{
-                    TRISC2_JOB_POINTER.write(None);
-                    jump_to(base, info.entry, info.stack);
-                    TRISC2_JOB_RESULT.write(Some(()));
-                }}
+        loop {{
+            if let Some((base, info)) = TRISC2_JOB_POINTER.read() {{
+                TRISC2_JOB_POINTER.write(None);
+                jump_to(base, info.entry, info.stack);
+                TRISC2_JOB_RESULT.write(Some(()));
             }}
         }}
     }}

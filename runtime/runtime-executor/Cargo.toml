@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ttx-rs = { path = "../../" }
+relocate = { path = "../../relocate" }
 
 runtime-shared = { path = "../runtime-shared" }
 

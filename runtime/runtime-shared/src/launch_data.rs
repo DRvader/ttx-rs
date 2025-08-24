@@ -2,7 +2,7 @@ use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
 /// Info required to setup each core to execute the kernel workload.
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize, MaxSize)]
 pub struct CoreLaunchData {
     /// Offset relative to where the workload is loaded to jump to in order to start executing
     pub entry: u32,
@@ -20,17 +20,19 @@ impl CoreLaunchData {
     }
 }
 
-#[derive(Default, Deserialize, Serialize, MaxSize)]
+#[derive(Debug, Default, Deserialize, Serialize, MaxSize)]
 pub struct LaunchRequest {
     pub job_request_addr: u64,
     pub job_offset: u64,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize, MaxSize)]
 pub struct LaunchData {
     pub workload_bank: (u8, u8),
     pub workload_bank_offset: u64,
     pub workload_bank_size: u64,
+
+    pub kernel_size: u64,
 
     pub bss: u32,
     pub ebss: u32,
@@ -53,6 +55,8 @@ pub struct LaunchData {
 impl LaunchData {
     pub const fn cdefault() -> Self {
         Self {
+            kernel_size: 0,
+
             workload_bank: (0, 0),
             workload_bank_offset: 0,
             workload_bank_size: 0,

@@ -88,22 +88,7 @@ impl PushFirmware {
         let (relocations, mut workload_binary) = workload.get_binary();
 
         for relocation in relocations {
-            let value = match relocation.read_offset {
-                ttx_rs::loader::RelocationRead::Base => job_location as u32,
-                ttx_rs::loader::RelocationRead::SymbolValue32(value) => job_location as u32 + value,
-                ttx_rs::loader::RelocationRead::Offset(read_offset) => {
-                    let read_value = &workload_binary[read_offset as usize..];
-                    u32::from_le_bytes([read_value[0], read_value[1], read_value[2], read_value[3]])
-                }
-            };
-
-            let write_loc = &mut workload_binary[relocation.write_offset as usize..];
-            let value = ((value as i64 + relocation.addend) as u32).to_le_bytes();
-
-            write_loc[0] = value[0];
-            write_loc[1] = value[1];
-            write_loc[2] = value[2];
-            write_loc[3] = value[3];
+            relocation.relocate_binary(job_location, &mut workload_binary);
         }
 
         device.noc_write(NocId::Noc1, tensix, job_location, &workload_binary);

@@ -1,13 +1,9 @@
 use std::collections::HashMap;
 
+use relocate::KernelRelocation;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
-use ttx_rs::{
-    Arch,
-    kernel::KernelData,
-    loader::{KernelRelocation, LoadOptions},
-    tensix_builder::Rewrite,
-};
+use ttx_rs::{Arch, kernel::KernelData, loader::LoadOptions, tensix_builder::Rewrite};
 
 use super::firmware::build_kernel_elf_cached;
 
@@ -18,18 +14,57 @@ pub struct OutputBuffer {
     pub count: usize,
 }
 
-impl OutputBuffer {
-    pub fn output_completion(&self, index: usize) -> String {
-        assert!(index < self.count);
-        format!("_COMPLETION_SLOT_{}_{}", self.name, index)
+pub struct OutputSlot {
+    pub name: String,
+    pub size: usize,
+    pub index: usize,
+}
+
+impl OutputSlot {
+    pub fn symbol_base(&self) -> String {
+        format!("_BUFFER_{}", self.name)
     }
 
+    fn slot_symbol_base(&self) -> String {
+        format!("{}_SLOT_{}", self.symbol_base(), self.index)
+    }
+
+    pub fn symbol_read(&self) -> String {
+        format!("{}_READ_INDEX", self.slot_symbol_base())
+    }
+
+    pub fn symbol_write(&self) -> String {
+        format!("{}_WRITE_INDEX", self.symbol_base())
+    }
+
+    pub fn symbol_flushed(&self) -> String {
+        format!("{}_FLUSHED", self.symbol_base())
+    }
+
+    pub fn symbol_data(&self) -> String {
+        format!("{}_DATA", self.symbol_base())
+    }
+}
+
+impl OutputBuffer {
     pub fn output_count(&self) -> String {
         format!("_COMPLETION_COUNT_{}", self.name)
     }
 
     pub fn output_buffer(&self) -> String {
         self.name.clone()
+    }
+
+    pub fn get_slot(&self, index: usize) -> Option<OutputSlot> {
+        if index >= self.count {
+            None
+        } else {
+            Some(OutputSlot {
+                name: self.name.clone(),
+                size: self.size,
+                index,
+            })
+        }
     }
 }
 
@@ -70,35 +105,87 @@ impl WorkloadBuilder {
         // The number of nodes waiting on the completion
         completion_slots: usize,
     ) -> OutputBuffer {
+        // To add empty full detection we need to burn a slot
+        let size = size + 1;
         let name = name.as_ref();
 
+        let buffer_name = format!("_BUFFER_{name}");
+
+        let mut smallest_read = String::new();
+        smallest_read.push_str(&format!(
+            "fn smallest_read_for_{buffer_name}(write: u32) -> u32 {{"
+        ));
+        if completion_slots == 0 {
+            smallest_read.push_str("let max_read = 0;\n");
+        }
+
         for i in 0..completion_slots {
-            let name = format!("_COMPLETION_SLOT_{name}_{i}");
+            let name = format!("{buffer_name}_SLOT_{i}_READ_INDEX");
             self.global.push_str(&format!(
                 r#"
                 #[unsafe(no_mangle)]
-                static mut {name}: NocAlignment<u32, 1> = NocAlignment::new(0);
+                static {name}: SYNC<u32> = SYNC::new(0);
             "#
+            ));
+
+            if i == 0 {
+                smallest_read.push_str(&format!(
+                    r#"
+                    let mut max_read = {name}.read();
+                    let mut max_count = buffer_count(write, max_read, {size});
+                    "#
+                ));
+            } else {
+                smallest_read.push_str(&format!(
+                    r#"
+                let new_max_read = {name}.read();
+                let new_max_count = buffer_count(write, new_max_read, {size});
+                if new_max_count > max_count {{
+                    max_read = new_max_read;
+                    max_count = new_max_count;
+                }}
+                "#
+                ));
+            }
+        }
+
+        smallest_read.push_str("max_read\n}");
+
+        self.global.push_str(&smallest_read);
+
+        {
+            let name = format!("{buffer_name}_FLUSHED");
+            self.global.push_str(&format!(
+                r#"
+            #[unsafe(no_mangle)]
+            static {name}: SYNC<u32> = SYNC::new(0);
+          "#
             ));
         }
 
-        let completion_name = format!("_COMPLETION_COUNT_{name}");
-        self.global.push_str(&format!(
-            r#"
+        {
+            let name = format!("{buffer_name}_WRITE_INDEX");
+            self.global.push_str(&format!(
+                r#"
             #[unsafe(no_mangle)]
-            static mut {completion_name}: NocAlignment<u8, 4> = NocAlignment::new(0);
+            static {name}: SYNC<u32> = SYNC::new(0);
           "#
-        ));
-        self.global.push_str(&format!(
-            r#"
+            ));
+        }
+
+        {
+            let name = format!("{buffer_name}_DATA");
+            self.global.push_str(&format!(
+                r#"
             #[unsafe(no_mangle)]
-            static mut {name}: NocAlignment<u8, {size}> = NocAlignment::new(0);
+            static {name}: SYNC<[u8; {size}]> = SYNC::new([0; {size}]);
           "#
-        ));
+            ));
+        }
 
         OutputBuffer {
             name: name.to_string(),
-            size,
+            size: size - 1,
             count: completion_slots,
         }
     }
@@ -358,6 +445,49 @@ impl Workload {
                     n0: (value as u8, (value >> 8) as u8),
                     n1: ((value >> 16) as u8, (value >> 24) as u8)
                 }}
+            }}
+        }}
+
+        fn buffer_count(write: u32, read: u32, size: u32) -> u32 {{
+            if write >= read {{
+                write - read
+            }} else {{
+                size - read + write
+            }}
+        }}
+
+        fn buffer_pull(remote: Tile, data: u32, read: u32, write: u32, size: u32, value: &mut [u8]) {{
+        }}
+
+        fn buffer_push_dyn(smallest_read: fn(u32) -> u32, data: *mut u8, size: u32, write: &SYNC<u32>, value: &[u8]) {{
+            unsafe {{
+                for v in value {{
+                    let write_value = write.read();
+
+                    // Wait while buffer is full
+                    while smallest_read(write_value) == (write_value + 1) % size {{ }}
+
+                    data.add(write_value as usize).write_volatile(*v);
+
+                    write.write((write_value + 1) % size);
+                }}
+            }}
+        }}
+
+        fn buffer_push<const SIZE: usize>(smallest_read: fn(u32) -> u32, data: &SYNC<[u8; SIZE]>, write: &SYNC<u32>, value: &[u8]) {{
+            unsafe {{
+                buffer_push_dyn(smallest_read, &raw mut ((*data.get())[0]), SIZE as u32, write, value)
+            }}
+        }}
+
+        fn buffer_complete(smallest_read: fn(u32) -> u32, write: &SYNC<u32>, flushed: &SYNC<u32>) {{
+            unsafe {{
+                flushed.write(true as u8 as u32);
+
+                let write = write.read();
+
+                // Wait for buffer to be empty
+                while write != smallest_read(write) {{}}
             }}
         }}
 
