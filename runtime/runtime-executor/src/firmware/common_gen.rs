@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-pub fn write_cargo_toml() -> String {
+pub fn write_cargo_toml(enable_defmt: bool) -> String {
     let path = env!("CARGO_MANIFEST_DIR").parse::<PathBuf>().unwrap();
     let shared_path = path.parent().unwrap().join("runtime-shared");
     let relocate_path = path.parent().unwrap().parent().unwrap().join("relocate");
@@ -19,13 +19,20 @@ pub fn write_cargo_toml() -> String {
         tensix-std = {{path = "{}/../../../tensix-std"}}
         runtime-shared = {{path = "{}"}}
         postcard = "1.1.1"
+        {defmt}
         relocate = {{path = "{}"}}
         "#,
         env!("CARGO_MANIFEST_DIR"),
         shared_path.display(),
-        relocate_path.display()
+        relocate_path.display(),
+        defmt = if enable_defmt {
+            "defmt = \"1.0.0\""
+        } else {
+            ""
+        }
     )
 }
+
 pub fn write_main(global: &str, brisc: &str) -> String {
     format!(
         r#"

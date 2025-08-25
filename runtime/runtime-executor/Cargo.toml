@@ -17,6 +17,8 @@ serde = { workspace = true }
 tempfile = "3.20.0"
 uuid = { version = "1.17.0", features = ["v4"] }
 
+defmt-decoder = { version = "1.0.0" }
+
 [dev-dependencies]
 ctor = "0.4.2"
 tracing-subscriber = {version = "0.3.19", features = ["env-filter"]}

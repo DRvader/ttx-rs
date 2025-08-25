@@ -88,7 +88,7 @@ fn dynamic_load_dram_pull() {
 
         let mut chip = chip.unwrap();
 
-        let paramters = DramPullFirmwareParameters {};
+        let paramters = DramPullFirmwareParameters { use_defmt: false };
         let mut firmware = load_dram_pull_firmware(&mut chip, paramters);
 
         let mut builder = workload::WorkloadBuilder {
@@ -122,14 +122,21 @@ fn dynamic_load_dram_pull() {
 
         let workload = firmware.queue_workload(&mut chip, workload, vec![buffer]);
 
-        let valid = chip.noc_read32(ttx_rs::chip::noc::NocId::Noc1, workload.tile, workload.data("BUFFERS_VALID"));
-        tracing::info!("{:x}", valid);
+        // let log_chip = chip.dupe().unwrap();
+        // std::thread::spawn(move || {
+        //     runtime_executor::firmware::defmt::run_defmt(
+        //         log_chip,
+        //         workload.tile,
+        //         &firmware.elf,
+        //         &firmware.data,
+        //     );
+        // });
 
-        // workload.wait_buffers_valid(&mut chip);
+        workload.wait_buffers_valid(&mut chip);
 
         let data = workload.empty_output(&mut chip, &slot);
         let data = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
 
-        assert_eq!(data, 2);
+        assert_eq!(data, 0xfaca, "0x{data:x}(actual) != 0xfaca(expected)");
     }
 }

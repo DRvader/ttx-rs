@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use goblin::elf::{Reloc, program_header};
+use goblin::elf::{program_header, Reloc};
 use luwen::luwen_core::Arch;
 use relocate::{KernelRelocation, RelocationRead};
 use serde::{Deserialize, Serialize};
@@ -8,8 +8,8 @@ use tensix_builder::{CacheEnable, Rewrite};
 
 use crate::{
     chip::{
-        Chip,
         noc::{NocAddress, NocId, NocInterface, Tile},
+        Chip,
     },
     kernel::{Alignment16, CoreData, Kernel, KernelBinData, KernelBytes, KernelData},
 };
@@ -427,6 +427,7 @@ pub fn build_kernel_elf(
     arch: Arch,
     options: LoadOptions,
     custom_link: Option<(String, Vec<Rewrite>)>,
+    extra_flags: Vec<String>,
 ) -> (KernelData, Vec<u8>) {
     let arch = match arch {
         luwen::luwen_core::Arch::Grayskull => tensix_builder::StandardTarget::Grayskull,
@@ -468,6 +469,7 @@ pub fn build_kernel_elf(
             stack_probes: options.build_options.stack_probes,
             kernel_name: name.to_string(),
             hide_output: options.hide_output,
+            extra_flags,
         },
     );
 
@@ -480,8 +482,9 @@ pub fn build_kernel(
     arch: Arch,
     options: LoadOptions,
     custom_link: Option<(String, Vec<Rewrite>)>,
+    extra_flags: Vec<String>,
 ) -> KernelData {
-    build_kernel_elf(name, arch, options, custom_link).0
+    build_kernel_elf(name, arch, options, custom_link, extra_flags).0
 }
 
 pub fn quick_load(name: &str, mut device: Chip, core: Tile, options: LoadOptions) -> Kernel {
@@ -515,6 +518,7 @@ pub fn quick_load(name: &str, mut device: Chip, core: Tile, options: LoadOptions
             stack_probes: options.build_options.stack_probes,
             kernel_name: name.to_string(),
             hide_output: options.hide_output,
+            extra_flags: Vec::new(),
         },
     );
 

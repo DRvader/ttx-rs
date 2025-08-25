@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use ttx_rs::{Arch, kernel::KernelData, loader::LoadOptions, tensix_builder::Rewrite};
 
-use super::firmware::build_kernel_elf_cached;
+use super::firmware::build_kernel_cached;
 
 #[derive(Default, Hash, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OutputBuffer {
@@ -248,6 +248,7 @@ impl WorkloadBuilder {
 }
 
 pub struct Workload {
+    pub elf: Vec<u8>,
     pub path: Option<TempDir>,
     pub data: KernelData,
 }
@@ -268,6 +269,7 @@ impl Workload {
     pub fn dupe(&self) -> Self {
         Self {
             path: None,
+            elf: self.elf.clone(),
             data: self.data.clone(),
         }
     }
@@ -569,7 +571,7 @@ impl Workload {
             &available_space_for_workload.to_string(),
         );
 
-        let (path, (kernel_data, _elf)) = build_kernel_elf_cached(
+        let (path, (kernel_data, elf)) = build_kernel_cached(
             arch,
             builder,
             LoadOptions::new_without_base(),
@@ -586,10 +588,12 @@ impl Workload {
                     },
                 ],
             )),
+            Vec::new(),
             files,
         );
 
         Workload {
+            elf,
             path,
             data: kernel_data,
         }

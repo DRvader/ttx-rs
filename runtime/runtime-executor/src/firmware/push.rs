@@ -14,11 +14,12 @@ use ttx_rs::{
 
 use crate::workload::{LoadedWorkload, Workload};
 
-use super::build_kernel_cached;
+use super::{build_firmware_cached, build_kernel_cached};
 
 pub struct PushFirmware {
     pub path: Option<TempDir>,
     pub data: KernelData,
+    pub elf: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -30,7 +31,7 @@ impl PushFirmware {
 
         files.insert(
             "Cargo.toml".to_string(),
-            super::common_gen::write_cargo_toml(),
+            super::common_gen::write_cargo_toml(false),
         );
         write_main(&mut files, parameters.clone());
 
@@ -41,19 +42,21 @@ impl PushFirmware {
             Arch::Unknown(_) => todo!(),
         };
 
-        let (dir, kernel_data) = build_kernel_cached(
+        let (dir, (kernel_data, elf)) = build_firmware_cached(
             "push",
             arch,
             LoadOptions::new_without_base().use_cache(CacheEnable::CustomDir(
                 super::super::SCCACHE_DIR.path().to_path_buf(),
             )),
             Some((link_script.to_string(), vec![])),
+            Vec::new(),
             files,
         );
 
         PushFirmware {
             path: dir,
             data: kernel_data,
+            elf,
         }
     }
 

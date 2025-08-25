@@ -114,6 +114,7 @@ pub struct CargoOptions {
     pub stack_probes: bool,
     pub kernel_name: String,
     pub hide_output: bool,
+    pub extra_flags: Vec<String>,
 }
 
 // Check if we might be running inside a cargo invocation.
@@ -234,8 +235,7 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
                             start: "\"pre-link-args\"".to_string(),
                             end: "},".to_string(),
                             replace: format!(
-                                "\"pre-link-args\": {{ \"gnu-lld\": [\"-T{}\"] ",
-                                format!("{name}.x"),
+                                "\"pre-link-args\": {{ \"gnu-lld\": [\"-T{name}.x\"] "
                             ),
                         },
                     );
@@ -351,10 +351,16 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
     if !kernel_name.starts_with('"') || !kernel_name.ends_with('"') {
         kernel_name = format!("\"{kernel_name}\"");
     }
-    let mut flags = format!("--cfg kernel_name={}", kernel_name);
+    let mut flags = format!("--cfg kernel_name={kernel_name}");
     if let Some(linker_path) = linker_path {
         flags = format!("{flags} -L {}", linker_path.display());
     }
+
+    for flag in options.extra_flags.into_iter() {
+        flags.push(' ');
+        flags.push_str(&flag);
+    }
+
     cargo.env("RUSTFLAGS", flags);
 
     if let CacheEnable::Enabled | CacheEnable::CustomDir(_) = options.use_cache {
@@ -385,7 +391,7 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
     let build = build.output().expect("Failed to execute cargo build");
 
     if build.status.success() {
-        get_compiler_artifact(&String::from_utf8(build.stdout).unwrap()).unwrap_or_else(|| {
+        get_compiler_artifact(String::from_utf8(build.stdout).unwrap()).unwrap_or_else(|| {
             if options.hide_output {
                 eprintln!(
                     "--- build output ---\n{}",

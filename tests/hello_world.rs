@@ -167,6 +167,7 @@ fn build_test(chip: &mut Chip, noc_id: NocId, tile: Tile, file: &str, wait: bool
         chip.arch(),
         chip::loader::LoadOptions::new(dir.path()).hide_output(),
         None,
+        Vec::new(),
     );
 
     chip.load_kernel(kernel_data, noc_id, tile, wait)
@@ -187,6 +188,7 @@ fn build_tests(chip: &mut Chip, tiles: Option<Vec<Tile>>, file: &str, wait: bool
         chip.arch(),
         chip::loader::LoadOptions::new(dir.path()).hide_output(),
         None,
+        Vec::new(),
     );
 
     chip.load_kernels(&mut kernel_data, tiles, wait);

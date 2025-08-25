@@ -10,16 +10,18 @@ use ttx_rs::{
 use crate::KernelKey;
 
 mod common_gen;
+pub mod defmt;
 pub mod dram_pull;
 pub mod push;
 
-pub fn build_kernel_cached(
+pub fn build_firmware_cached(
     name: &str,
     arch: Arch,
     mut options: LoadOptions,
     custom_link: Option<(String, Vec<Rewrite>)>,
+    extra_flags: Vec<String>,
     files: HashMap<String, String>,
-) -> (Option<tempfile::TempDir>, KernelData) {
+) -> (Option<tempfile::TempDir>, (KernelData, Vec<u8>)) {
     assert_eq!(
         options.base_path,
         PathBuf::default(),
@@ -33,16 +35,17 @@ pub fn build_kernel_cached(
 
     options.base_path = dir;
 
-    let kernel = build_kernel(&kernel_name, arch, options, custom_link);
+    let kernel = build_kernel_elf(name, arch, options, custom_link, extra_flags);
 
     (None, kernel)
 }
 
-pub fn build_kernel_elf_cached(
+pub fn build_kernel_cached(
     arch: Arch,
     parameters: super::workload::WorkloadBuilder,
     mut options: LoadOptions,
     custom_link: Option<(String, Vec<Rewrite>)>,
+    extra_flags: Vec<String>,
     files: HashMap<String, String>,
 ) -> (Option<tempfile::TempDir>, (KernelData, Vec<u8>)) {
     assert_eq!(
@@ -58,7 +61,7 @@ pub fn build_kernel_elf_cached(
 
     options.base_path = dir;
 
-    let kernel = build_kernel_elf(&kernel_name, arch, options, custom_link);
+    let kernel = build_kernel_elf(&kernel_name, arch, options, custom_link, extra_flags);
 
     (None, kernel)
 }

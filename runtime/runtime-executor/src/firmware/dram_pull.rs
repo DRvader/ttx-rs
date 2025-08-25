@@ -18,12 +18,15 @@ use crate::{
     workload::{LoadedWorkload, OutputBuffer, OutputSlot, Workload},
 };
 
-use super::build_kernel_cached;
+use super::{build_firmware_cached, build_kernel_cached};
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-pub struct DramPullFirmwareParameters {}
+pub struct DramPullFirmwareParameters {
+    pub use_defmt: bool,
+}
 
 pub struct DramPullFirmware {
+    pub elf: Vec<u8>,
     pub path: Option<TempDir>,
     pub data: KernelData,
     pub dram_allocator: MultiBufferAllocator,
@@ -150,7 +153,7 @@ impl DramPullFirmware {
 
         files.insert(
             "Cargo.toml".to_string(),
-            super::common_gen::write_cargo_toml(),
+            super::common_gen::write_cargo_toml(parameters.use_defmt),
         );
         write_main(&mut files, job_server, job_server_addr, parameters.clone());
 
@@ -161,18 +164,26 @@ impl DramPullFirmware {
             Arch::Unknown(_) => todo!(),
         };
 
-        let (dir, kernel_data) = build_kernel_cached(
+        let extra_flags = if parameters.use_defmt {
+            vec!["-C link-arg=-Tdefmt.x".to_string()]
+        } else {
+            Vec::new()
+        };
+
+        let (dir, (kernel_data, elf)) = build_firmware_cached(
             "dram-pull",
             chip.arch(),
             LoadOptions::new_without_base().use_cache(CacheEnable::CustomDir(
                 super::super::SCCACHE_DIR.path().to_path_buf(),
             )),
             Some((link_script.to_string(), vec![])),
+            extra_flags,
             files,
         );
 
         DramPullFirmware {
             path: dir,
+            elf,
             data: kernel_data,
             dram_allocator: MultiBufferAllocator::new(vec![
                 chip.dram_size() as usize;
@@ -187,7 +198,7 @@ impl DramPullFirmware {
     }
 
     pub fn get_workload_binary(&self, workload: &Workload) -> (usize, Box<[u8]>) {
-        let (relocations, kernel_binary) = workload.get_binary();
+        let (mut relocations, kernel_binary) = workload.get_binary();
         let kernel_size = kernel_binary.len();
 
         tracing::info!("kernel_size {:x}", kernel_size);
@@ -195,9 +206,13 @@ impl DramPullFirmware {
         let mut kernel_relocations = Vec::new();
         kernel_relocations.extend((relocations.len() as u64).to_le_bytes());
 
+        //        relocations.swap(0, 1);
+
         for reloc in relocations {
             kernel_relocations = postcard::to_extend(&reloc, kernel_relocations).unwrap();
         }
+
+        tracing::info!("{:?}", kernel_relocations);
 
         let mut output = Vec::new();
         output.extend(kernel_binary);
@@ -542,6 +557,61 @@ impl DramPullFirmware {
     }
 }
 
+fn insert_defmt() -> &'static str {
+    r#"
+#[defmt::global_logger]
+struct NocLogger;
+
+#[unsafe(no_mangle)]
+static LOG_BUFFER: SYNC<[u8; 1024]> = SYNC::new([0; 1024]);
+#[unsafe(no_mangle)]
+static LOG_READ: SYNC<u32> = SYNC::new(0);
+#[unsafe(no_mangle)]
+static LOG_WRITE: SYNC<u32> = SYNC::new(0);
+
+impl NocLogger {{
+    pub fn push(val: u8) {{
+        let write = LOG_WRITE.read();
+        while (write + 1) % 1024 == LOG_READ.read() {{}}
+
+        unsafe {{
+            (*LOG_BUFFER.get()).as_mut_ptr().add(write as usize).write_volatile(val);
+        }}
+
+        LOG_WRITE.write((write + 1) % 1024);
+    }}
+
+    pub fn is_empty() -> bool {{
+        LOG_WRITE.read() == LOG_READ.read()
+    }}
+
+    pub fn is_full() -> bool {{
+        (LOG_WRITE.read() + 1) % 1024 == LOG_READ.read()
+    }}
+}}
+
+unsafe impl defmt::Logger for NocLogger {{
+    fn acquire() {{}}
+
+    unsafe fn flush() {{
+        loop {{
+            if Self::is_empty() {{
+                break;
+            }}
+        }}
+    }}
+
+    unsafe fn release() {{}}
+
+    unsafe fn write(bytes: &[u8]) {{
+        for byte in bytes {{
+            Self::push(*byte);
+        }}
+    }}
+}}
+    "#
+}
+
 pub fn write_main(
     files: &mut HashMap<String, String>,
     job_server: Tile,
@@ -552,6 +622,8 @@ pub fn write_main(
         r#"
         #![no_std]
         #![no_main]
+
+        {defmt}
 
         use runtime_shared::MaxSize;
 
@@ -849,8 +921,10 @@ pub fn write_main(
 
                     // Perform relocations
                     for i in 0..num_relocations {{
-                        JOB_LAUNCHED.write(0x104 + i as u32);
-                        let (relocation, relocations) = postcard::take_from_bytes::<relocate::KernelRelocation>(relocations).unwrap();
+                        JOB_LAUNCHED.write(0x105 + i as u32);
+                        let (relocation, next_relocations) = postcard::take_from_bytes::<relocate::KernelRelocation>(relocations).unwrap();
+                        relocations = next_relocations;
+
                         relocation.relocate_ptr(base_addr as u64, binary_addr);
                     }}
 
@@ -938,7 +1012,12 @@ pub fn write_main(
         "#,
         job_server_x = job_server.addr.n0.0,
         job_server_y = job_server.addr.n0.1,
-        job_server_addr = job_server_addr
+        job_server_addr = job_server_addr,
+        defmt = if parameters.use_defmt {
+            insert_defmt()
+        } else {
+            ""
+        }
     );
     files.insert("src/main.rs".to_string(), src);
 }
