@@ -33,11 +33,68 @@ pub fn write_cargo_toml(enable_defmt: bool) -> String {
     )
 }
 
-pub fn write_main(global: &str, brisc: &str) -> String {
+fn insert_defmt() -> &'static str {
+    r#"
+#[defmt::global_logger]
+struct NocLogger;
+
+#[unsafe(no_mangle)]
+static LOG_BUFFER: SYNC<[u8; 1024]> = SYNC::new([0; 1024]);
+#[unsafe(no_mangle)]
+static LOG_READ: SYNC<u32> = SYNC::new(0);
+#[unsafe(no_mangle)]
+static LOG_WRITE: SYNC<u32> = SYNC::new(0);
+
+impl NocLogger {{
+    pub fn push(val: u8) {{
+        let write = LOG_WRITE.read();
+        while (write + 1) % 1024 == LOG_READ.read() {{}}
+
+        unsafe {{
+            (*LOG_BUFFER.get()).as_mut_ptr().add(write as usize).write_volatile(val);
+        }}
+
+        LOG_WRITE.write((write + 1) % 1024);
+    }}
+
+    pub fn is_empty() -> bool {{
+        LOG_WRITE.read() == LOG_READ.read()
+    }}
+
+    pub fn is_full() -> bool {{
+        (LOG_WRITE.read() + 1) % 1024 == LOG_READ.read()
+    }}
+}}
+
+unsafe impl defmt::Logger for NocLogger {{
+    fn acquire() {{}}
+
+    unsafe fn flush() {{
+        loop {{
+            if Self::is_empty() {{
+                break;
+            }}
+        }}
+    }}
+
+    unsafe fn release() {{}}
+
+    unsafe fn write(bytes: &[u8]) {{
+        for byte in bytes {{
+            Self::push(*byte);
+        }}
+    }}
+}}
+    "#
+}
+
+pub fn write_main(use_defmt: bool, global: &str, brisc: &str, brisc_post_load: &str) -> String {
     format!(
         r#"
     #![no_std]
     #![no_main]
+
+    {defmt}
 
     #[repr(align(64))]
     pub struct NocAligned<T>(T);
@@ -234,6 +291,8 @@ pub fn write_main(global: &str, brisc: &str) -> String {
                     *((base_addr + addr) as *mut u32) = 0;
                 }}
 
+                {brisc_post_load}
+
                 JOB_LAUNCHED.write(200);
 
                 NCRISC_JOB_POINTER.write(Some((base_addr, job.ncrisc)));
@@ -320,5 +379,6 @@ pub fn write_main(global: &str, brisc: &str) -> String {
         }}
     }}
     "#,
+        defmt = if use_defmt { insert_defmt() } else { "" }
     )
 }

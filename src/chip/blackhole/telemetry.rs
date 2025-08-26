@@ -136,7 +136,7 @@ impl Telemetry {
         if !(0x10000000..=0x1007FFFF).contains(&telemetry_table_addr)
             || !(0x10000000..=0x1007FFFF).contains(&telemetry_table_data)
         {
-            println!("{:x} {:x}", telemetry_table_addr, telemetry_table_data);
+            println!("{telemetry_table_addr:x} {telemetry_table_data:x}");
             return Err(TelemetryError::TelemetryNotReady);
         }
 

@@ -26,49 +26,49 @@ fn read_write_test() {
 
         chip.noc_write32(noc_id, tile, aligned_addr, 0xfaca);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr);
-        assert_eq!(readback, 0xfaca, "{:x} != faca", readback);
+        assert_eq!(readback, 0xfaca, "{readback:x} != faca");
 
         chip.noc_write32(noc_id, tile, aligned_addr, 0xcdcd_cdcd);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr);
-        assert_eq!(readback, 0xcdcd_cdcd, "{:x} != cdcdcdcd", readback);
+        assert_eq!(readback, 0xcdcd_cdcd, "{readback:x} != cdcdcdcd");
 
         chip.noc_write32(noc_id, tile, aligned_addr + 4, 0xcdcd_cdcd);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr + 4);
-        assert_eq!(readback, 0xcdcd_cdcd, "{:x} != cdcdcdcd", readback);
+        assert_eq!(readback, 0xcdcd_cdcd, "{readback:x} != cdcdcdcd");
 
         chip.noc_write32(noc_id, tile, aligned_addr + 1, 0xdead);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr);
-        assert_eq!(readback, 0xdeadcd, "{:x} != deadcd", readback);
+        assert_eq!(readback, 0xdeadcd, "{readback:x} != deadcd");
         let readback = chip.noc_read32(noc_id, tile, aligned_addr + 4);
-        assert_eq!(readback, 0xcdcdcd00, "{:x} != 00cdcdcd", readback);
+        assert_eq!(readback, 0xcdcdcd00, "{readback:x} != 00cdcdcd");
 
         chip.noc_write32(noc_id, tile, aligned_addr, 0xcdcd_cdcd);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr);
-        assert_eq!(readback, 0xcdcd_cdcd, "{:x} != cdcdcdcd", readback);
+        assert_eq!(readback, 0xcdcd_cdcd, "{readback:x} != cdcdcdcd");
 
         chip.noc_write32(noc_id, tile, aligned_addr + 4, 0xcdcd_cdcd);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr + 4);
-        assert_eq!(readback, 0xcdcd_cdcd, "{:x} != cdcdcdcd", readback);
+        assert_eq!(readback, 0xcdcd_cdcd, "{readback:x} != cdcdcdcd");
 
         chip.noc_write32(noc_id, tile, aligned_addr + 3, 0xc0ffe);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr);
-        assert_eq!(readback, 0xfecdcdcd, "{:x} != fecdcdcd", readback);
+        assert_eq!(readback, 0xfecdcdcd, "{readback:x} != fecdcdcd");
         let readback = chip.noc_read32(noc_id, tile, aligned_addr + 4);
-        assert_eq!(readback, 0xcd000c0f, "{:x} != c0f", readback);
+        assert_eq!(readback, 0xcd000c0f, "{readback:x} != c0f");
 
         chip.noc_write32(noc_id, tile, aligned_addr, 0x01234567);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr);
-        assert_eq!(readback, 0x01234567, "{:x} != 01234567", readback);
+        assert_eq!(readback, 0x01234567, "{readback:x} != 01234567");
 
         chip.noc_write32(noc_id, tile, aligned_addr + 4, 0xabcdef);
         let readback = chip.noc_read32(noc_id, tile, aligned_addr + 4);
-        assert_eq!(readback, 0xabcdef, "{:x} != abcdef", readback);
+        assert_eq!(readback, 0xabcdef, "{readback:x} != abcdef");
 
         let readback = chip.noc_read32(noc_id, tile, aligned_addr + 1);
-        assert_eq!(readback, 0xef012345, "{:x} != ef012345", readback);
+        assert_eq!(readback, 0xef012345, "{readback:x} != ef012345");
 
         let readback = chip.noc_read32(noc_id, tile, aligned_addr + 3);
-        assert_eq!(readback, 0xabcdef01, "{:x} != abcdef01", readback);
+        assert_eq!(readback, 0xabcdef01, "{readback:x} != abcdef01");
 
         // Block write test
         let mut write_buffer = Vec::new();
@@ -116,7 +116,7 @@ fn read_write_test() {
         assert_eq!(write_buffer, readback_buffer);
 
         let readback = chip.noc_read32(noc_id, tile, aligned_addr + 1);
-        assert_eq!(readback, 0xef012345, "{:x} != ef012345", readback);
+        assert_eq!(readback, 0xef012345, "{readback:x} != ef012345");
 
         let mut readback_buffer = vec![0u8; 4];
         chip.noc_read(noc_id, tile, aligned_addr + 1, &mut readback_buffer);
@@ -235,61 +235,61 @@ fn arc_read_write_test() {
 
             raw_device.write32(aligned_addr as u32, 0xfaca).unwrap();
             let readback = raw_device.read32(aligned_addr as u32).unwrap();
-            assert_eq!(readback, 0xfaca, "{:x} != faca", readback);
+            assert_eq!(readback, 0xfaca, "{readback:x} != faca");
 
             raw_device
                 .write32(aligned_addr as u32, 0xcdcd_cdcd)
                 .unwrap();
             let readback = raw_device.read32(aligned_addr as u32).unwrap();
-            assert_eq!(readback, 0xcdcd_cdcd, "{:x} != cdcdcdcd", readback);
+            assert_eq!(readback, 0xcdcd_cdcd, "{readback:x} != cdcdcdcd");
 
             raw_device
                 .write32(aligned_addr as u32 + 4, 0xcdcd_cdcd)
                 .unwrap();
             let readback = raw_device.read32(aligned_addr as u32 + 4).unwrap();
-            assert_eq!(readback, 0xcdcd_cdcd, "{:x} != cdcdcdcd", readback);
+            assert_eq!(readback, 0xcdcd_cdcd, "{readback:x} != cdcdcdcd");
 
             raw_device.write32(aligned_addr as u32 + 1, 0xdead).unwrap();
             let readback = raw_device.read32(aligned_addr as u32).unwrap();
-            assert_eq!(readback, 0xdeadcd, "{:x} != deadcd", readback);
+            assert_eq!(readback, 0xdeadcd, "{readback:x} != deadcd");
             let readback = raw_device.read32(aligned_addr as u32 + 4).unwrap();
-            assert_eq!(readback, 0xcdcdcd00, "{:x} != 00cdcdcd", readback);
+            assert_eq!(readback, 0xcdcdcd00, "{readback:x} != 00cdcdcd");
 
             raw_device
                 .write32(aligned_addr as u32, 0xcdcd_cdcd)
                 .unwrap();
             let readback = raw_device.read32(aligned_addr as u32).unwrap();
-            assert_eq!(readback, 0xcdcd_cdcd, "{:x} != cdcdcdcd", readback);
+            assert_eq!(readback, 0xcdcd_cdcd, "{readback:x} != cdcdcdcd");
 
             raw_device
                 .write32(aligned_addr as u32 + 4, 0xcdcd_cdcd)
                 .unwrap();
             let readback = raw_device.read32(aligned_addr as u32 + 4).unwrap();
-            assert_eq!(readback, 0xcdcd_cdcd, "{:x} != cdcdcdcd", readback);
+            assert_eq!(readback, 0xcdcd_cdcd, "{readback:x} != cdcdcdcd");
 
             raw_device
                 .write32(aligned_addr as u32 + 3, 0xc0ffe)
                 .unwrap();
             let readback = raw_device.read32(aligned_addr as u32).unwrap();
-            assert_eq!(readback, 0xfecdcdcd, "{:x} != fecdcdcd", readback);
+            assert_eq!(readback, 0xfecdcdcd, "{readback:x} != fecdcdcd");
             let readback = raw_device.read32(aligned_addr as u32 + 4).unwrap();
-            assert_eq!(readback, 0xcd000c0f, "{:x} != c0f", readback);
+            assert_eq!(readback, 0xcd000c0f, "{readback:x} != c0f");
 
             raw_device.write32(aligned_addr as u32, 0x01234567).unwrap();
             let readback = raw_device.read32(aligned_addr as u32).unwrap();
-            assert_eq!(readback, 0x01234567, "{:x} != 01234567", readback);
+            assert_eq!(readback, 0x01234567, "{readback:x} != 01234567");
 
             raw_device
                 .write32(aligned_addr as u32 + 4, 0xabcdef)
                 .unwrap();
             let readback = raw_device.read32(aligned_addr as u32 + 4).unwrap();
-            assert_eq!(readback, 0xabcdef, "{:x} != abcdef", readback);
+            assert_eq!(readback, 0xabcdef, "{readback:x} != abcdef");
 
             let readback = raw_device.read32(aligned_addr as u32 + 1).unwrap();
-            assert_eq!(readback, 0xef012345, "{:x} != ef012345", readback);
+            assert_eq!(readback, 0xef012345, "{readback:x} != ef012345");
 
             let readback = raw_device.read32(aligned_addr as u32 + 3).unwrap();
-            assert_eq!(readback, 0xabcdef01, "{:x} != abcdef01", readback);
+            assert_eq!(readback, 0xabcdef01, "{readback:x} != abcdef01");
 
             // Block write test
             let mut write_buffer = Vec::new();
@@ -357,7 +357,7 @@ fn arc_read_write_test() {
             assert_eq!(write_buffer, readback_buffer);
 
             let readback = raw_device.read32(aligned_addr as u32 + 1).unwrap();
-            assert_eq!(readback, 0xef012345, "{:x} != ef012345", readback);
+            assert_eq!(readback, 0xef012345, "{readback:x} != ef012345");
 
             let mut readback_buffer = vec![0u8; 4];
             raw_device

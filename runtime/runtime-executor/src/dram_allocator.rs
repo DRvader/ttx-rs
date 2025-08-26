@@ -1,14 +1,7 @@
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
-struct FreeRegion {
-    offset: usize,
-    size: usize,
-}
-
-#[derive(Debug)]
 struct Buffer {
-    size: usize,
     free_regions: BTreeMap<usize, usize>, // offset -> size
 }
 
@@ -16,7 +9,7 @@ impl Buffer {
     fn new(size: usize) -> Self {
         let mut free_regions = BTreeMap::new();
         free_regions.insert(0, size);
-        Buffer { size, free_regions }
+        Buffer { free_regions }
     }
 
     fn allocate(&mut self, size: usize, align: usize) -> Option<usize> {

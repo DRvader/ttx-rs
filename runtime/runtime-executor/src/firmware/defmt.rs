@@ -32,7 +32,7 @@ fn location_info(
 }
 
 pub fn run_defmt(mut log_chip: ttx_rs::Chip, tile: Tile, elf: &[u8], data: &KernelData) {
-    let verbose = false;
+    // let verbose = false;
 
     let table = defmt_decoder::Table::parse(elf).unwrap();
     let table = match table {
@@ -51,13 +51,15 @@ pub fn run_defmt(mut log_chip: ttx_rs::Chip, tile: Tile, elf: &[u8], data: &Kern
         return;
     };
 
-    let mut formatter_config = defmt_decoder::log::format::FormatterConfig::default();
-    formatter_config.is_timestamp_available = table.has_timestamp();
+    // let formatter_config = defmt_decoder::log::format::FormatterConfig {
+    //     is_timestamp_available: table.has_timestamp(),
+    //     ..Default::default()
+    // };
 
-    let host_formatter_config = defmt_decoder::log::format::FormatterConfig::default();
+    // let host_formatter_config = defmt_decoder::log::format::FormatterConfig::default();
 
-    let formatter = defmt_decoder::log::format::Formatter::new(formatter_config);
-    let host_formatter = defmt_decoder::log::format::HostFormatter::new(host_formatter_config);
+    // let formatter = defmt_decoder::log::format::Formatter::new(formatter_config);
+    // let host_formatter = defmt_decoder::log::format::HostFormatter::new(host_formatter_config);
 
     let current_dir = std::env::current_dir().unwrap();
 

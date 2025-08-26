@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use ttx_rs::{
     Arch,
     kernel::KernelData,
-    loader::{LoadOptions, build_kernel, build_kernel_elf},
+    loader::{LoadOptions, build_kernel_elf},
     tensix_builder::Rewrite,
 };
 
@@ -28,7 +28,7 @@ pub fn build_firmware_cached(
         "cannot perform a cached build with a set base path"
     );
 
-    let (kernel_name, dir) = super::KERNEL_CACHE.cache_build(
+    let (_kernel_name, dir) = super::KERNEL_CACHE.cache_build(
         KernelKey::Name(name.to_string()),
         files.into_iter().collect(),
     );

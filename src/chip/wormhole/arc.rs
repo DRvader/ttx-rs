@@ -145,7 +145,7 @@ impl ArcMsg {
                 0 => FwType::ArcL2,
                 1 => FwType::FwBundle,
                 2 => FwType::FwBundleSPI,
-                _ => panic!("Unknown FW type {}", arg),
+                _ => panic!("Unknown FW type {arg}"),
             }),
             value => ArcMsg::Raw {
                 msg_code: value,

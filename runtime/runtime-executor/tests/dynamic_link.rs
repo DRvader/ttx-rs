@@ -20,8 +20,8 @@ fn test_init() {
     );
 }
 
-fn load_push_firmware(chip: &mut Chip) -> PushFirmware {
-    let mut firmware = PushFirmware::compile(PushFirmwareParameters {}, chip.arch());
+fn load_push_firmware(chip: &mut Chip, parameters: PushFirmwareParameters) -> PushFirmware {
+    let mut firmware = PushFirmware::compile(parameters, chip.arch());
 
     chip.load_kernels(&mut firmware.data, None, false);
 
@@ -37,7 +37,8 @@ fn dynamic_load_push() {
 
         let mut chip = chip.unwrap();
 
-        let firmware = load_push_firmware(&mut chip);
+        let firmware =
+            load_push_firmware(&mut chip, PushFirmwareParameters { use_defmt: false });
 
         let builder = workload::WorkloadBuilder {
             available_space: firmware.available_space(),

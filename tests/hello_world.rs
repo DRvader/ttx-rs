@@ -480,15 +480,15 @@ fn noc_test() {
 
         let data = read_buffer_a(1);
 
-        println!("\tValue to write from a -> b: {:04x}", data);
+        println!("\tValue to write from a -> b: {data:04x}");
 
         let data = read_buffer_a(2);
 
-        println!("\tValue to write from a -> b + 1 {:04x}", data);
+        println!("\tValue to write from a -> b + 1 {data:04x}");
 
         let data = read_buffer_a(3);
 
-        println!("\tdebug {:04x}", data);
+        println!("\tdebug {data:04x}");
 
         let data = [0u32; 4];
         chip.noc_read(NocId::Noc0, kernal_a_tile, buffer_a, unsafe {
@@ -504,17 +504,17 @@ fn noc_test() {
         println!("\tWaiting for end");
 
         let data = read_buffer_a(11);
-        println!("\tData to write from a -> b: {:x}", data);
+        println!("\tData to write from a -> b: {data:x}");
         let data = read_buffer_a(5);
-        println!("\tCoordinate of b: {:x}", data);
+        println!("\tCoordinate of b: {data:x}");
 
         kernel_a.print_state_diff();
 
         let data = read_b(a_to_b_dst_addr as u64);
         let data1 = read_b(a_to_b_dst_addr as u64 + 16);
 
-        println!("\tData sent from a -> b: {:04x}", data);
-        println!("\tData sent from b -> a: {:04x}", data1);
+        println!("\tData sent from a -> b: {data:04x}");
+        println!("\tData sent from b -> a: {data1:04x}");
 
         kernel_b.wait_id(NocId::Noc0);
         println!("\tB COPMLETED");
@@ -522,8 +522,8 @@ fn noc_test() {
         let data = read_b(a_to_b_dst_addr as u64);
         let data1 = read_a(a_to_b_src_addr);
 
-        println!("\tData sent from a -> b: {:04x}", data);
-        println!("\tData recieved from b -> a: {:04x}", data1);
+        println!("\tData sent from a -> b: {data:04x}");
+        println!("\tData recieved from b -> a: {data1:04x}");
 
         kernel_a.print_state();
 

@@ -24,7 +24,7 @@ impl Display for StandardTarget {
 }
 
 impl StandardTarget {
-    pub fn to_string(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             StandardTarget::Grayskull => "grayskull",
             StandardTarget::Wormhole => "wormhole",
@@ -72,9 +72,9 @@ impl Display for TensixTarget {
 }
 
 impl TensixTarget {
-    pub fn to_string(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
-            Self::Standard(s) => s.to_string(),
+            Self::Standard(s) => s.name(),
             TensixTarget::Custom { name, .. } => name.clone(),
         }
     }
@@ -87,7 +87,7 @@ pub enum CargoProfile {
 }
 
 impl CargoProfile {
-    pub fn to_string(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             CargoProfile::Release => "release".to_string(),
             CargoProfile::Debug => "dev".to_string(),
@@ -131,36 +131,30 @@ pub fn get_target_dir() -> Option<PathBuf> {
 fn get_compiler_artifact(stdout: impl AsRef<str>) -> Option<CargoResult> {
     for message in cargo_metadata::Message::parse_stream(stdout.as_ref().as_bytes()) {
         let message = message.unwrap();
-        match message {
-            cargo_metadata::Message::CompilerArtifact(artifact) => {
-                if let Some(artifact) = artifact.executable {
-                    return Some(CargoResult {
-                        path: artifact.as_std_path().to_path_buf(),
-                        bin: true,
-                    });
-                }
+        if let cargo_metadata::Message::CompilerArtifact(artifact) = message {
+            if let Some(artifact) = artifact.executable {
+                return Some(CargoResult {
+                    path: artifact.as_std_path().to_path_buf(),
+                    bin: true,
+                });
             }
-            _ => {}
         }
     }
 
     // No executable found... maybe search for a staticlib?
     for message in cargo_metadata::Message::parse_stream(stdout.as_ref().as_bytes()) {
         let message = message.unwrap();
-        match message {
-            cargo_metadata::Message::CompilerArtifact(artifact) => {
-                if artifact.target.kind.contains(&"staticlib".to_string())
-                    || artifact.target.kind.contains(&"cdylib".to_string())
-                {
-                    if let Some(filename) = artifact.filenames.get(0) {
-                        return Some(CargoResult {
-                            path: filename.as_std_path().to_path_buf(),
-                            bin: false,
-                        });
-                    }
+        if let cargo_metadata::Message::CompilerArtifact(artifact) = message {
+            if artifact.target.kind.contains(&"staticlib".to_string())
+                || artifact.target.kind.contains(&"cdylib".to_string())
+            {
+                if let Some(filename) = artifact.filenames.first() {
+                    return Some(CargoResult {
+                        path: filename.as_std_path().to_path_buf(),
+                        bin: false,
+                    });
                 }
             }
-            _ => {}
         }
     }
 
@@ -188,7 +182,7 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
         ),
     ]);
 
-    let target = options.target.to_string();
+    let target = options.target.name();
 
     let target_dir = get_target_dir().unwrap_or_else(|| {
         <PathBuf as std::str::FromStr>::from_str("target")
@@ -204,7 +198,7 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
     let target_def_file = match options.target {
         TensixTarget::Standard(standard_target) => {
             let file = kernel_target_cache_dir.join(format!("{target}.json"));
-            let contents = target_map[standard_target.to_string().as_str()];
+            let contents = target_map[standard_target.name().as_str()];
             let mut overwrite = true;
             if let Ok(existing) = std::fs::read(&file) {
                 if existing == contents {
@@ -225,7 +219,7 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
         } => {
             let file = match target_def {
                 StandardTargetOrCustom::Standard((s, mut rewrites)) => {
-                    let target_json = target_map[s.to_string().as_str()];
+                    let target_json = target_map[s.name().as_str()];
                     let mut target_json = String::from_utf8(target_json.to_vec()).unwrap();
 
                     // Always rewrite the link arg
@@ -333,7 +327,7 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
         "--target",
         &target_def_file.to_string_lossy(),
         "--profile",
-        &options.profile.to_string(),
+        &options.profile.name(),
         build_std,
     ]);
 
@@ -372,7 +366,7 @@ pub fn invoke_cargo<P: AsRef<Path>>(path: P, options: CargoOptions) -> CargoResu
 
     if options.lto {
         cargo.env(
-            format!("CARGO_PROFILE_{}_LTO", options.profile.to_string()),
+            format!("CARGO_PROFILE_{}_LTO", options.profile.name()),
             "true",
         );
     }

@@ -14,7 +14,7 @@ use ttx_rs::{
 
 use crate::workload::{LoadedWorkload, Workload};
 
-use super::{build_firmware_cached, build_kernel_cached};
+use super::build_firmware_cached;
 
 pub struct PushFirmware {
     pub path: Option<TempDir>,
@@ -23,7 +23,9 @@ pub struct PushFirmware {
 }
 
 #[derive(Clone)]
-pub struct PushFirmwareParameters {}
+pub struct PushFirmwareParameters {
+    pub use_defmt: bool,
+}
 
 impl PushFirmware {
     pub fn compile(parameters: PushFirmwareParameters, arch: Arch) -> Self {
@@ -31,7 +33,7 @@ impl PushFirmware {
 
         files.insert(
             "Cargo.toml".to_string(),
-            super::common_gen::write_cargo_toml(false),
+            super::common_gen::write_cargo_toml(parameters.use_defmt),
         );
         write_main(&mut files, parameters.clone());
 
@@ -42,6 +44,12 @@ impl PushFirmware {
             Arch::Unknown(_) => todo!(),
         };
 
+        let extra_flags = if parameters.use_defmt {
+            vec!["-C link-arg=-Tdefmt.x".to_string()]
+        } else {
+            Vec::new()
+        };
+
         let (dir, (kernel_data, elf)) = build_firmware_cached(
             "push",
             arch,
@@ -49,7 +57,7 @@ impl PushFirmware {
                 super::super::SCCACHE_DIR.path().to_path_buf(),
             )),
             Some((link_script.to_string(), vec![])),
-            Vec::new(),
+            extra_flags,
             files,
         );
 
@@ -168,6 +176,7 @@ impl PushFirmware {
 
 pub fn write_main(files: &mut HashMap<String, String>, parameters: PushFirmwareParameters) {
     let src = super::common_gen::write_main(
+        parameters.use_defmt,
         r#"
         #[unsafe(no_mangle)]
         static JOB_INFO: SYNC<runtime_shared::CLaunchData> = SYNC::new(runtime_shared::CLaunchData::cdefault());
@@ -206,6 +215,7 @@ pub fn write_main(files: &mut HashMap<String, String>, parameters: PushFirmwareP
 
         *JOB_LAUNCHED.get() = 100;
         "#,
+        "",
     );
     files.insert("src/main.rs".to_string(), src);
 }

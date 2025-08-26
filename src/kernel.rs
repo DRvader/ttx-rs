@@ -4,8 +4,8 @@ use relocate::KernelRelocation;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Chip,
     chip::noc::{NocAddress, NocId, NocInterface, Tile},
+    Chip,
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -230,7 +230,7 @@ impl KernelBinData {
                 self.print_core_panic_data(chip, noc_id, tile, name, panic);
             }
 
-            let mut info = format!("{} {{", name);
+            let mut info = format!("{name} {{");
             let mut prev = false;
             if let Some(state) = state {
                 info = format!("{info} STATE: {state}");

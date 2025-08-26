@@ -113,7 +113,7 @@ impl WorkloadBuilder {
 
         let mut smallest_read = String::new();
         smallest_read.push_str(&format!(
-            "fn smallest_read_for_{buffer_name}(write: u32) -> u32 {{"
+            "#[allow(non_snake_case)]\nfn smallest_read_for_{buffer_name}(write: u32) -> u32 {{"
         ));
         if completion_slots == 0 {
             smallest_read.push_str("let max_read = 0;\n");
@@ -337,20 +337,24 @@ impl Workload {
         }}
 
         impl<T: Copy, const N: usize> NocAlignment<T, N> {{
+            #[allow(unused)]
             pub const fn new(value: T) -> Self {{
                 NocAlignment([value; N])
             }}
         }}
 
         impl<T, const N: usize> NocAlignment<T, N> {{
+            #[allow(unused)]
             pub fn addr(&self) -> u32 {{
                 self.0.as_ptr() as u32
             }}
 
+            #[allow(unused)]
             pub fn len(&self) -> u32 {{
                 N as u32
             }}
 
+            #[allow(unused)]
             pub fn read(&self, index: usize) -> T
                 where T: Sized
             {{
@@ -359,6 +363,7 @@ impl Workload {
                 }}
             }}
 
+            #[allow(unused)]
             pub fn write(&mut self, index: usize, value: T) {{
                 unsafe {{
                     self.0.as_mut_ptr().add(index).write_volatile(value);
@@ -436,6 +441,7 @@ impl Workload {
 
         type SYNC<T> = SyncUnsafeNocCell<T>;
 
+        #[allow(unused)]
         struct Tile {{
             n0: (u8, u8),
             n1: (u8, u8)
@@ -453,10 +459,12 @@ impl Workload {
         #[unsafe(no_mangle)]
         static BUFFERS_VALID: SYNC<u32> = SYNC::new(false as u8 as u32);
 
+        #[allow(unused)]
         fn make_buffers_valid() {{
             BUFFERS_VALID.write(true as u8 as u32);
         }}
 
+        #[allow(unused)]
         fn buffer_count(write: u32, read: u32, size: u32) -> u32 {{
             if write >= read {{
                 write - read
@@ -465,9 +473,11 @@ impl Workload {
             }}
         }}
 
+        #[allow(unused)]
         fn buffer_pull(remote: Tile, data: u32, read: u32, write: u32, size: u32, value: &mut [u8]) {{
         }}
 
+        #[allow(unused)]
         fn buffer_push_dyn(smallest_read: fn(u32) -> u32, data: *mut u8, size: u32, write: &SYNC<u32>, value: &[u8]) {{
             unsafe {{
                 for v in value {{
@@ -483,12 +493,14 @@ impl Workload {
             }}
         }}
 
+        #[allow(unused)]
         fn buffer_push<const SIZE: usize>(smallest_read: fn(u32) -> u32, data: &SYNC<[u8; SIZE]>, write: &SYNC<u32>, value: &[u8]) {{
             unsafe {{
                 buffer_push_dyn(smallest_read, &raw mut ((*data.get())[0]), SIZE as u32, write, value)
             }}
         }}
 
+        #[allow(unused)]
         fn buffer_complete(smallest_read: fn(u32) -> u32, write: &SYNC<u32>, flushed: &SYNC<u32>) {{
             unsafe {{
                 flushed.write(true as u8 as u32);
@@ -509,37 +521,27 @@ impl Workload {
 
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn brisc_kmain() {{
-            unsafe {{
-                {brisc}
-            }}
+            {brisc}
         }}
 
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn ncrisc_kmain() {{
-            unsafe {{
-                {ncrisc}
-            }}
+            {ncrisc}
         }}
 
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn trisc0_kmain() {{
-            unsafe {{
-                {trisc0}
-            }}
+            {trisc0}
         }}
 
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn trisc1_kmain() {{
-            unsafe {{
-                {trisc1}
-            }}
+            {trisc1}
         }}
 
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn trisc2_kmain() {{
-            unsafe {{
-                {trisc2}
-            }}
+            {trisc2}
         }}
         "#,
                 global = builder.global,
