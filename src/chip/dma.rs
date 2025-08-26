@@ -1,6 +1,6 @@
 use super::Chip;
 
-pub use luwen::ttkmd_if::DmaBuffer;
+pub use ttkmd_if::DmaBuffer;
 
 pub struct AlignedDmaBuffer {
     buffer: DmaBuffer,

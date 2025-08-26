@@ -1,5 +1,5 @@
 pub use chip::{open, Chip};
-pub use luwen::luwen_core::Arch;
+pub use luwen_core::Arch;
 
 pub use macros::kernel;
 pub use tensix_builder;
@@ -9,7 +9,7 @@ pub mod kernel;
 pub mod loader;
 
 pub fn enumerate() -> Vec<usize> {
-    luwen::ttkmd_if::PciDevice::scan()
+    ttkmd_if::PciDevice::scan()
 }
 
 #[macro_export]

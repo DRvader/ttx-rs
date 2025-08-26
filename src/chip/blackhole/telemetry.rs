@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use luwen::ttkmd_if::PciError;
 use num_derive::FromPrimitive;
+use ttkmd_if::PciError;
 
 use crate::chip::{
     blackhole::arc::{arc_fw_init_status, ArcFwInitStatus},

@@ -1,7 +1,7 @@
 use arc::ArcMsgError;
-use luwen::ttkmd_if::PciDevice;
 use noc_endpoints::NocGrid;
 use pci_noc::PciNoc;
+use ttkmd_if::{tlb::Ordering, PciDevice};
 
 use super::noc::{NocAddress, NocInterface};
 
@@ -118,7 +118,7 @@ impl NocInterface for Wormhole {
         super::noc::noc_multicast(
             &mut self.interface.device,
             &self.interface.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             start,
             end,
@@ -139,7 +139,7 @@ impl NocInterface for Wormhole {
         super::noc::noc_multicast32(
             &mut self.interface.device,
             &self.interface.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             start,
             end,

@@ -1,4 +1,4 @@
-use luwen::ttkmd_if::PciError;
+use ttkmd_if::PciError;
 
 use crate::chip::noc::{NocAddress, Tile};
 

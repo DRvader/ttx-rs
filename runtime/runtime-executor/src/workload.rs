@@ -570,7 +570,6 @@ impl Workload {
             Arch::Grayskull => include_str!("workload_link/grayskull-kernel.x"),
             Arch::Wormhole => include_str!("workload_link/wormhole-kernel.x"),
             Arch::Blackhole => include_str!("workload_link/blackhole-kernel.x"),
-            Arch::Unknown(_) => todo!(),
         };
         let link_script = link_script.replace(
             "{available_space}",

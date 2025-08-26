@@ -1,4 +1,5 @@
 use thiserror::Error;
+use ttkmd_if::PciError;
 
 use super::Grayskull;
 
@@ -210,7 +211,7 @@ pub enum ArcMsgError {
     },
 
     #[error(transparent)]
-    AxiError(#[from] luwen::ttkmd_if::PciError),
+    AxiError(#[from] PciError),
 }
 
 #[derive(Debug)]
@@ -235,15 +236,11 @@ impl ArcMsgOk {
     }
 }
 
-fn arc_read32(chip: &mut Grayskull, addr: u32) -> Result<u32, luwen::ttkmd_if::PciError> {
+fn arc_read32(chip: &mut Grayskull, addr: u32) -> Result<u32, PciError> {
     chip.interface.device.read32(addr)
 }
 
-fn arc_write32(
-    chip: &mut Grayskull,
-    addr: u32,
-    value: u32,
-) -> Result<(), luwen::ttkmd_if::PciError> {
+fn arc_write32(chip: &mut Grayskull, addr: u32, value: u32) -> Result<(), PciError> {
     chip.interface.device.write32(addr, value)
 }
 

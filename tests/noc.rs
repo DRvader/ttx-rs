@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use luwen::ttkmd_if::PciDevice;
 use tempfile::TempDir;
 use tracing::info;
+use ttkmd_if::PciDevice;
 use ttx_rs::{
     chip::{
         self,

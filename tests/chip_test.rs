@@ -1,4 +1,4 @@
-use luwen::ttkmd_if::PciDevice;
+use ttkmd_if::PciDevice;
 
 use ttx_rs::chip::{
     noc::{NocId, NocInterface},

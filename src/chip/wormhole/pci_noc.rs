@@ -1,4 +1,4 @@
-use luwen::ttkmd_if::{PciDevice, PciError, PossibleTlbAllocation};
+use ttkmd_if::{tlb::Ordering, PciDevice, PciError, PossibleTlbAllocation};
 
 use crate::chip::noc::{self, NocAddress, NocId};
 
@@ -18,7 +18,7 @@ impl PciNoc {
         noc::noc_read(
             &mut self.device,
             &self.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             tile.get(noc_id).0,
             tile.get(noc_id).1,
@@ -36,7 +36,7 @@ impl PciNoc {
         noc::noc_read32(
             &mut self.device,
             &self.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             tile.get(noc_id).0,
             tile.get(noc_id).1,
@@ -54,7 +54,7 @@ impl PciNoc {
         noc::noc_write(
             &mut self.device,
             &self.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             tile.get(noc_id).0,
             tile.get(noc_id).1,
@@ -73,7 +73,7 @@ impl PciNoc {
         noc::noc_write32(
             &mut self.device,
             &self.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             tile.get(noc_id).0,
             tile.get(noc_id).1,

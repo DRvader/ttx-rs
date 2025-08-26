@@ -67,7 +67,7 @@ impl QueuedWorkload {
         let read = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_read()));
         let write = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_write()));
 
-        let count_to_read = write as usize - (read as usize + slot.size) % slot.size;
+        let count_to_read = ((write as usize + slot.size) - read as usize) % slot.size;
 
         let mut data = vec![0; count_to_read];
 
@@ -105,11 +105,24 @@ impl QueuedWorkload {
     pub fn empty_output(&self, chip: &mut ttx_rs::Chip, slot: &OutputSlot) -> Box<[u8]> {
         let mut output = Vec::new();
 
+        let start_time = std::time::Instant::now();
+        let mut warned = false;
+
         // Exit when flushed is true
         loop {
             let flushed =
                 chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_flushed())) != 0;
             output.extend_from_slice(&self.pull_output(chip, slot));
+
+            if !warned && start_time.elapsed() > std::time::Duration::from_secs(1) {
+                let read = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_read()));
+                let write = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_write()));
+
+                tracing::warn!(
+                    "Looks like we hung waiting for program completion; buffer read {read} - buffer write {write}"
+                );
+                warned = true;
+            }
 
             if flushed {
                 break;
@@ -120,11 +133,19 @@ impl QueuedWorkload {
     }
 
     pub fn wait_buffers_valid(&self, chip: &mut ttx_rs::Chip) {
+        let start_time = std::time::Instant::now();
+        let mut warned = false;
+
         loop {
             let buffers_valid =
                 chip.noc_read32(NocId::Noc1, self.tile, self.data("BUFFERS_VALID")) != 0;
             if buffers_valid {
                 break;
+            }
+
+            if !warned && start_time.elapsed() > std::time::Duration::from_secs(1) {
+                tracing::warn!("Looks like we hung waiting for the workload to start");
+                warned = true;
             }
         }
     }
@@ -148,7 +169,6 @@ impl DramPullFirmware {
             Arch::Grayskull => include_str!("../workload_link/grayskull.x"),
             Arch::Wormhole => include_str!("../workload_link/wormhole.x"),
             Arch::Blackhole => include_str!("../workload_link/blackhole.x"),
-            Arch::Unknown(_) => todo!(),
         };
 
         let extra_flags = if parameters.use_defmt {
@@ -235,7 +255,12 @@ impl DramPullFirmware {
 
             brisc: CoreLaunchData {
                 entry: workload.data.sym_table["brisc_kmain"] as u32,
-                stack: Some(workload.data.sym_table["___brisc_stack_top"] as u32),
+                stack: if !chip.arch().is_grayskull() {
+                    // For some reason GS has issues with this
+                    Some(workload.data.sym_table["___brisc_stack_top"] as u32)
+                } else {
+                    None
+                },
             },
             ncrisc: CoreLaunchData {
                 entry: workload.data.sym_table["ncrisc_kmain"] as u32,

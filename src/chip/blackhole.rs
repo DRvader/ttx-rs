@@ -1,7 +1,7 @@
-use luwen::ttkmd_if::{PciDevice, PciError};
 use noc_endpoints::Endpoints;
 use pci_noc::PciNoc;
 use telemetry::{Telemetry, TelemetryData, TelemetryError};
+use ttkmd_if::{tlb::Ordering, PciDevice, PciError};
 
 use super::noc::{NocAddress, NocInterface};
 
@@ -123,7 +123,7 @@ impl NocInterface for Blackhole {
         super::noc::noc_multicast(
             &mut self.interface.device,
             &self.interface.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             self.endpoints.tensix_broadcast[noc_id as u8 as usize].0,
             self.endpoints.tensix_broadcast[noc_id as u8 as usize].1,
@@ -137,7 +137,7 @@ impl NocInterface for Blackhole {
         super::noc::noc_multicast32(
             &mut self.interface.device,
             &self.interface.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             self.endpoints.tensix_broadcast[noc_id as u8 as usize].0,
             self.endpoints.tensix_broadcast[noc_id as u8 as usize].1,

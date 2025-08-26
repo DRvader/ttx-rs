@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use goblin::elf::{program_header, Reloc};
-use luwen::luwen_core::Arch;
+use luwen_core::Arch;
 use relocate::{KernelRelocation, RelocationRead};
 use serde::{Deserialize, Serialize};
 use tensix_builder::{CacheEnable, Rewrite};
@@ -430,10 +430,9 @@ pub fn build_kernel_elf(
     extra_flags: Vec<String>,
 ) -> (KernelData, Vec<u8>) {
     let arch = match arch {
-        luwen::luwen_core::Arch::Grayskull => tensix_builder::StandardTarget::Grayskull,
-        luwen::luwen_core::Arch::Wormhole => tensix_builder::StandardTarget::Wormhole,
-        luwen::luwen_core::Arch::Blackhole => tensix_builder::StandardTarget::Blackhole,
-        luwen::luwen_core::Arch::Unknown(_) => todo!(),
+        Arch::Grayskull => tensix_builder::StandardTarget::Grayskull,
+        Arch::Wormhole => tensix_builder::StandardTarget::Wormhole,
+        Arch::Blackhole => tensix_builder::StandardTarget::Blackhole,
     };
 
     let arch = if let Some((link, rewrites)) = custom_link {
@@ -489,10 +488,9 @@ pub fn build_kernel(
 
 pub fn quick_load(name: &str, mut device: Chip, core: Tile, options: LoadOptions) -> Kernel {
     let arch = match device.arch() {
-        luwen::luwen_core::Arch::Grayskull => tensix_builder::StandardTarget::Grayskull,
-        luwen::luwen_core::Arch::Wormhole => tensix_builder::StandardTarget::Wormhole,
-        luwen::luwen_core::Arch::Blackhole => tensix_builder::StandardTarget::Blackhole,
-        luwen::luwen_core::Arch::Unknown(_) => todo!(),
+        Arch::Grayskull => tensix_builder::StandardTarget::Grayskull,
+        Arch::Wormhole => tensix_builder::StandardTarget::Wormhole,
+        Arch::Blackhole => tensix_builder::StandardTarget::Blackhole,
     };
 
     let profile = match options.build_options.profile.as_str() {

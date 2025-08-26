@@ -41,7 +41,6 @@ impl PushFirmware {
             Arch::Grayskull => include_str!("../workload_link/grayskull.x"),
             Arch::Wormhole => include_str!("../workload_link/wormhole.x"),
             Arch::Blackhole => include_str!("../workload_link/blackhole.x"),
-            Arch::Unknown(_) => todo!(),
         };
 
         let extra_flags = if parameters.use_defmt {

@@ -32,6 +32,9 @@ pub struct KernelRelocation {
 }
 
 impl KernelRelocation {
+    /// # Safety
+    ///
+    /// Please make sure the binary pointer is valid.
     pub unsafe fn relocate_ptr(&self, base_addr: u64, mut binary: *mut u8) {
         self.relocate(
             &mut binary,

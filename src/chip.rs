@@ -2,8 +2,9 @@ use std::sync::{atomic::AtomicBool, Mutex};
 
 use blackhole::Blackhole;
 use grayskull::Grayskull;
-use luwen::{luwen_core::Arch, ttkmd_if::PciDevice};
+use luwen_core::Arch;
 use noc::{NocAddress, NocId, NocInterface, Tile};
+use ttkmd_if::PciDevice;
 use wormhole::Wormhole;
 
 use crate::kernel::{Kernel, KernelData};
@@ -59,9 +60,6 @@ pub fn open(index: usize) -> Result<Chip, String> {
         Arch::Blackhole => Chip::Blackhole(Box::new(
             Blackhole::init(device).map_err(|v| v.to_string())?,
         )),
-        Arch::Unknown(id) => {
-            unreachable!("Unkown chip type {id:x}");
-        }
     })
 }
 

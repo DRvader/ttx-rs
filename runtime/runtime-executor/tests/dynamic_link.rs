@@ -138,6 +138,6 @@ fn dynamic_load_dram_pull() {
         let data = workload.empty_output(&mut chip, &slot);
         let data = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
 
-        assert_eq!(data, 0xfaca, "0x{data:x}(actual) != 0xfaca(expected)");
+        assert_eq!(data, 0xfaca, "When testing {chip}: 0x{data:x}(actual) != 0xfaca(expected)");
     }
 }

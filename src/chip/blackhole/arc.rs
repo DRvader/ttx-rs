@@ -1,3 +1,5 @@
+use ttkmd_if::PciError;
+
 use crate::chip::{
     field::Field,
     noc::{NocAddress, NocId},
@@ -27,7 +29,7 @@ pub enum MessageError {
     ProtocolError(ProtocolErrorType),
 
     #[error(transparent)]
-    AxiError(#[from] luwen::ttkmd_if::PciError),
+    AxiError(#[from] PciError),
 }
 
 #[derive(Clone)]
@@ -43,34 +45,22 @@ pub struct MessageQueue<const N: usize> {
     pub fw_int: Field,
 }
 
-fn arc_read(
-    chip: &mut Blackhole,
-    addr: u64,
-    data: &mut [u8],
-) -> Result<(), luwen::ttkmd_if::PciError> {
+fn arc_read(chip: &mut Blackhole, addr: u64, data: &mut [u8]) -> Result<(), PciError> {
     chip.interface
         .tile_read(NocId::Noc0, chip.endpoints.arc.into(), addr, data)
 }
 
-fn arc_read32(chip: &mut Blackhole, addr: u64) -> Result<u32, luwen::ttkmd_if::PciError> {
+fn arc_read32(chip: &mut Blackhole, addr: u64) -> Result<u32, PciError> {
     chip.interface
         .tile_read32(NocId::Noc0, chip.endpoints.arc.into(), addr)
 }
 
-fn arc_write(
-    chip: &mut Blackhole,
-    addr: u64,
-    data: &[u8],
-) -> Result<(), luwen::ttkmd_if::PciError> {
+fn arc_write(chip: &mut Blackhole, addr: u64, data: &[u8]) -> Result<(), PciError> {
     chip.interface
         .tile_write(NocId::Noc0, chip.endpoints.arc.into(), addr, data)
 }
 
-fn arc_write32(
-    chip: &mut Blackhole,
-    addr: u64,
-    value: u32,
-) -> Result<(), luwen::ttkmd_if::PciError> {
+fn arc_write32(chip: &mut Blackhole, addr: u64, value: u32) -> Result<(), PciError> {
     chip.interface
         .tile_write32(NocId::Noc0, chip.endpoints.arc.into(), addr, value)
 }

@@ -1,7 +1,7 @@
 use arc::ArcMsgError;
-use luwen::ttkmd_if::PciDevice;
 use noc_endpoints::NocGrid;
 use pci_noc::PciNoc;
+use ttkmd_if::{tlb::Ordering, PciDevice};
 
 use super::noc::{NocAddress, NocInterface};
 
@@ -111,7 +111,7 @@ impl NocInterface for Grayskull {
         super::noc::noc_multicast(
             &mut self.interface.device,
             &self.interface.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             (0, 0),
             (12, 11),
@@ -125,7 +125,7 @@ impl NocInterface for Grayskull {
         super::noc::noc_multicast32(
             &mut self.interface.device,
             &self.interface.tlb,
-            luwen::ttkmd_if::tlb::Ordering::STRICT,
+            Ordering::STRICT,
             noc_id,
             (0, 0),
             (12, 11),

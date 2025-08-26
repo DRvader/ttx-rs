@@ -1,6 +1,7 @@
-use luwen::{
-    luwen_core::Arch,
-    ttkmd_if::{tlb::Ordering, PciDevice, PciError, PossibleTlbAllocation, Tlb},
+use luwen_core::Arch;
+use ttkmd_if::{
+    tlb::{get_tlb_info, Ordering},
+    PciDevice, PciError, PossibleTlbAllocation, Tlb,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,7 +88,7 @@ pub fn allocate_tlb(
     start_small: bool,
 ) -> Result<PossibleTlbAllocation, PciError> {
     if device.driver_version > 1 {
-        let tlb_info = luwen::ttkmd_if::tlb::get_tlb_info(device);
+        let tlb_info = get_tlb_info(device);
         let mut sizes = std::collections::HashSet::new();
         for config in tlb_info.tlb_config {
             sizes.insert(config.size);
@@ -111,9 +112,6 @@ pub fn allocate_tlb(
         Arch::Grayskull => 184,
         Arch::Wormhole => 184,
         Arch::Blackhole => 190,
-        Arch::Unknown(value) => {
-            unimplemented!("Have not implemented support for arch id {value:x}");
-        }
     }))
 }
 
@@ -135,8 +133,6 @@ pub fn noc_write(
             noc_sel: noc_id as u8,
             x_end: x,
             y_end: y,
-            // TODO(drosen): BH should use posted strirct for register access
-            // TODO(drosen): All others should use relaxed
             ordering,
             ..Default::default()
         },
@@ -162,8 +158,6 @@ pub fn noc_read(
             noc_sel: noc_id as u8,
             x_end: x,
             y_end: y,
-            // TODO(drosen): BH should use posted strirct for register access
-            // TODO(drosen): All others should use relaxed
             ordering,
             ..Default::default()
         },
@@ -189,8 +183,6 @@ pub fn noc_write32(
             noc_sel: noc_id as u8,
             x_end: x,
             y_end: y,
-            // TODO(drosen): BH should use posted strirct for register access
-            // TODO(drosen): All others should use relaxed
             ordering,
             ..Default::default()
         },
@@ -214,8 +206,6 @@ pub fn noc_read32(
             noc_sel: noc_id as u8,
             x_end: x,
             y_end: y,
-            // TODO(drosen): BH should use posted strirct for register access
-            // TODO(drosen): All others should use relaxed
             ordering,
             ..Default::default()
         },
@@ -243,8 +233,6 @@ pub fn noc_multicast(
             x_end: end.0,
             y_end: end.1,
             mcast: true,
-            // TODO(drosen): BH should use posted strirct for register access
-            // TODO(drosen): All others should use relaxed
             ordering,
             ..Default::default()
         },
@@ -273,8 +261,6 @@ pub fn noc_multicast32(
             x_end: end.0,
             y_end: end.1,
             mcast: true,
-            // TODO(drosen): BH should use posted strirct for register access
-            // TODO(drosen): All others should use relaxed
             ordering,
             ..Default::default()
         },
