@@ -67,48 +67,37 @@ impl QueuedWorkload {
         let read = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_read()));
         let write = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_write()));
 
-        tracing::info!("write {write:x} read {read:x}");
-
-        let count_to_read = if write >= read {
-            write as usize - read as usize
-        } else {
-            // Read is ahead therefore we have to get the gap to the end
-            // then add the write which lags behind
-            (slot.size - read as usize) + write as usize
-        };
+        let count_to_read = write as usize - (read as usize + slot.size) % slot.size;
 
         let mut data = vec![0; count_to_read];
 
-        if write == read {
+        if count_to_read == 0 {
             // Do nothing the queue is empty
-        } else if write > read {
+            return Box::new([]);
+        } else if read as usize + count_to_read > slot.size {
+            let first_read = slot.size - read as usize;
+            chip.noc_read(
+                NocId::Noc1,
+                self.tile,
+                self.data(slot.symbol_data()) + read as u64,
+                &mut data[..first_read],
+            );
+            chip.noc_read(
+                NocId::Noc1,
+                self.tile,
+                self.data(slot.symbol_data()),
+                &mut data[first_read..],
+            );
+        } else {
             chip.noc_read(
                 NocId::Noc1,
                 self.tile,
                 self.data(slot.symbol_data()) + read as u64,
                 &mut data,
             );
-        } else {
-            chip.noc_read(
-                NocId::Noc1,
-                self.tile,
-                self.data(slot.symbol_data()) + read as u64,
-                &mut data[..(slot.size - read as usize)],
-            );
-            chip.noc_read(
-                NocId::Noc1,
-                self.tile,
-                self.data(slot.symbol_data()),
-                &mut data[(slot.size - read as usize)..][..write as usize],
-            );
         }
 
-        chip.noc_write32(
-            NocId::Noc1,
-            self.tile,
-            self.data(slot.symbol_read()),
-            (read + count_to_read as u32) % slot.size as u32,
-        );
+        chip.noc_write32(NocId::Noc1, self.tile, self.data(slot.symbol_read()), write);
 
         data.into_boxed_slice()
     }
@@ -199,18 +188,12 @@ impl DramPullFirmware {
         let (relocations, kernel_binary) = workload.get_binary();
         let kernel_size = kernel_binary.len();
 
-        tracing::info!("kernel_size {:x}", kernel_size);
-
         let mut kernel_relocations = Vec::new();
         kernel_relocations.extend((relocations.len() as u64).to_le_bytes());
-
-        //        relocations.swap(0, 1);
 
         for reloc in relocations {
             kernel_relocations = postcard::to_extend(&reloc, kernel_relocations).unwrap();
         }
-
-        tracing::info!("{:?}", kernel_relocations);
 
         let mut output = Vec::new();
         output.extend(kernel_binary);

@@ -116,7 +116,7 @@ impl WorkloadBuilder {
             "#[allow(non_snake_case)]\nfn smallest_read_for_{buffer_name}(write: u32) -> u32 {{"
         ));
         if completion_slots == 0 {
-            smallest_read.push_str("let max_read = 0;\n");
+            smallest_read.push_str("0\n}");
         }
 
         for i in 0..completion_slots {
@@ -128,7 +128,9 @@ impl WorkloadBuilder {
             "#
             ));
 
-            if i == 0 {
+            if completion_slots == 1 {
+                smallest_read.push_str(&format!("{name}.read()\n}}"));
+            } else if i == 0 {
                 smallest_read.push_str(&format!(
                     r#"
                     let mut max_read = {name}.read();
@@ -149,7 +151,9 @@ impl WorkloadBuilder {
             }
         }
 
-        smallest_read.push_str("max_read\n}");
+        if completion_slots > 1 {
+            smallest_read.push_str("max_read\n}");
+        }
 
         self.global.push_str(&smallest_read);
 
@@ -185,7 +189,7 @@ impl WorkloadBuilder {
 
         OutputBuffer {
             name: name.to_string(),
-            size: size - 1,
+            size,
             count: completion_slots,
         }
     }
