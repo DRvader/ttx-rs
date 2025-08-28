@@ -278,14 +278,7 @@ impl DramPullFirmware {
 
             brisc: CoreLaunchData {
                 entry: workload.data.sym_table["brisc_kmain"] as u32,
-                stack: if !chip.arch().is_grayskull() {
-                    // For some reason GS has issues with this
-                    // Some(workload.data.sym_table["___brisc_stack_top"] as u32)
-                    // Now BH has issues?
-                    None
-                } else {
-                    None
-                },
+                stack: Some(workload.data.sym_table["___brisc_stack_top"] as u32),
             },
             ncrisc: CoreLaunchData {
                 entry: workload.data.sym_table["ncrisc_kmain"] as u32,

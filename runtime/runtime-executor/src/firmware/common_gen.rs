@@ -210,27 +210,15 @@ pub fn write_main(use_defmt: bool, global: &str, brisc: &str, brisc_post_load: &
 
     fn jump_to_stack(addr: u32, new_sp: u32) {{
         unsafe {{
-            let mut old_sp: usize;
-
             core::arch::asm!(
-                "mv {{0}}, sp",
-                out(reg) old_sp,
-            );
-
-            let old_sp_ref = &mut old_sp;
-
-            core::arch::asm!(
-                "mv sp, {{0}}",
-                in(reg) new_sp,
-            );
-
-            core::mem::transmute::<u32, fn()>(addr)();
-
-            let old_sp = *old_sp_ref;
-
-            core::arch::asm!(
-                "mv {{0}}, sp",
-                in(reg) old_sp,
+                "mv  t0, sp",       // save old sp to t0
+                "mv  sp, {{new_sp}}", // switch to new stack
+                "jalr ra, {{func}}",  // call function
+                "mv  sp, t0",       // restore old sp
+                new_sp = in(reg) new_sp,
+                func   = in(reg) addr,
+                out("t0") _,        // t0 is scratch
+                out("ra") _,
             );
         }}
     }}

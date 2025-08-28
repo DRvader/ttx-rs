@@ -88,10 +88,6 @@ fn dynamic_load_dram_pull() {
 
         let mut chip = chip.unwrap();
 
-        if !chip.arch().is_blackhole() {
-            continue;
-        }
-
         let paramters = DramPullFirmwareParameters { use_defmt: false };
         let mut firmware = load_dram_pull_firmware(&mut chip, paramters);
 
