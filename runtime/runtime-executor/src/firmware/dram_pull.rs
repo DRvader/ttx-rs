@@ -150,13 +150,6 @@ impl QueuedWorkload {
             }
         }
 
-        let read = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_read()));
-        let write = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_write()));
-
-        tracing::warn!(
-            "Looks like we hung waiting for program completion; buffer read {read} - buffer write {write}"
-        );
-
         output.into_boxed_slice()
     }
 
@@ -287,7 +280,9 @@ impl DramPullFirmware {
                 entry: workload.data.sym_table["brisc_kmain"] as u32,
                 stack: if !chip.arch().is_grayskull() {
                     // For some reason GS has issues with this
-                    Some(workload.data.sym_table["___brisc_stack_top"] as u32)
+                    // Some(workload.data.sym_table["___brisc_stack_top"] as u32)
+                    // Now BH has issues?
+                    None
                 } else {
                     None
                 },

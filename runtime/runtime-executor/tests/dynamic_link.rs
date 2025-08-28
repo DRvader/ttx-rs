@@ -100,7 +100,7 @@ fn dynamic_load_dram_pull() {
             ..Default::default()
         };
 
-        let buffer = builder.output_buffer("SYNC", 7, 1);
+        let buffer = builder.output_buffer("SYNC", 8, 1);
         let slot = buffer.get_slot(0).unwrap();
 
         builder.brisc = format!(

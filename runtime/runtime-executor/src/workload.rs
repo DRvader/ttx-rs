@@ -109,8 +109,6 @@ impl WorkloadBuilder {
         // The number of nodes waiting on the completion
         read_slots: usize,
     ) -> OutputBuffer {
-        // To add empty full detection we need to burn a slot
-        let size = size + 1;
         let name = name.as_ref();
 
         let buffer_name = format!("_BUFFER_{name}");

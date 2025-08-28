@@ -1,5 +1,5 @@
-fn wrap(value: u32, size: u32) -> u32 {
-    let value = value as i64 % size as i64 * 2;
+fn wrap(value: i64, size: u32) -> u32 {
+    let value = value % (size as i64 * 2);
     let value = if value < 0 {
         value + size as i64 * 2
     } else {
@@ -23,7 +23,7 @@ pub trait CbObserver {
     }
 
     fn size(read: u32, write: u32, capacity: u32) -> u32 {
-        wrap(write - read, capacity)
+        wrap(write as i64 - read as i64, capacity)
     }
 
     fn free(read: u32, write: u32, capacity: u32) -> u32 {
@@ -57,7 +57,7 @@ pub trait CbProducer: CbObserver {
         self.set_data(write % capacity, &input[..first_write]);
         self.set_data(0, &input[first_write..]);
 
-        self.set_write(wrap(write + count, capacity));
+        self.set_write(wrap(write as i64 + count as i64, capacity));
 
         count
     }
@@ -82,16 +82,16 @@ pub trait CbConsumer: CbObserver {
             return 0;
         }
 
-        let size = Self::size(read, write, capacity);
+        let free = Self::free(read, write, capacity);
 
-        let count = (output.len() as u32).min(size);
+        let count = (output.len() as u32).min(free);
 
         let first_read = count.min(capacity - (read % capacity)) as usize;
 
         self.get_data(read % capacity, &mut output[..first_read]);
         self.get_data(0, &mut output[first_read..]);
 
-        self.set_read(wrap(read + count, capacity));
+        self.set_read(wrap(read as i64 + count as i64, capacity));
 
         count
     }
