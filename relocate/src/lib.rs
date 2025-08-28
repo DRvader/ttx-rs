@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// The value to substitute on the right side of the
 /// relocation operation
-#[derive(Clone, Serialize, Deserialize, MaxSize)]
+#[derive(Debug, Clone, Serialize, Deserialize, MaxSize)]
 pub enum RelocationRead {
     /// Instead of reading substitute the loaded binary base
     Base32,
@@ -13,7 +13,9 @@ pub enum RelocationRead {
     /// This implies that the symbol value should have the loaded base
     /// added
     SymbolValue32(u32),
-    /// Offset from the loaded base to read from
+    /// Perform a relocation based on the symbol value assuming it comes from the fw
+    AbsoluteValue32(u32),
+    /// Read value from this absolute address
     Offset(u64),
 }
 
@@ -21,7 +23,7 @@ pub enum RelocationRead {
 /// between the dynamic file and the firmware.
 /// We also load all sections as a single block
 /// This means that we, in advance, know where symbols where be located relative to a global base
-#[derive(Clone, Serialize, Deserialize, MaxSize)]
+#[derive(Debug, Clone, Serialize, Deserialize, MaxSize)]
 pub struct KernelRelocation {
     /// The offset relative to the bottom of the binary where the write needs to happen
     pub write_offset: u64,
@@ -92,6 +94,7 @@ impl KernelRelocation {
         let value = match self.read_offset {
             RelocationRead::Base32 => base_addr as u32,
             RelocationRead::SymbolValue32(value) => base_addr as u32 + value,
+            RelocationRead::AbsoluteValue32(value) => value,
             RelocationRead::Offset(read_offset) => (read32)(data, read_offset as usize),
         };
 

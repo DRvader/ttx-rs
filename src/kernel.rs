@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use relocate::KernelRelocation;
+use relocate::{KernelRelocation, RelocationRead};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -294,11 +294,55 @@ impl KernelBinData {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub enum DynamicRelocationRead {
+    Symbol32(String),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum DynamicRelocation {
+    Kernel(RelocationRead),
+    Elf(DynamicRelocationRead),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ElfRelocation {
+    pub write_offset: u64,
+    pub read_offset: DynamicRelocation,
+    pub addend: i64,
+}
+
+impl ElfRelocation {
+    pub fn to_kernel_relocation(&self, symbols: &[&HashMap<String, u64>]) -> KernelRelocation {
+        let read_offset = match &self.read_offset {
+            DynamicRelocation::Kernel(relocation_read) => relocation_read.clone(),
+            DynamicRelocation::Elf(dynamic_relocation_read) => match dynamic_relocation_read {
+                DynamicRelocationRead::Symbol32(sym) => {
+                    let mut value = None;
+                    for symbol in symbols {
+                        if let Some(sym) = symbol.get(sym.as_str()) {
+                            value = Some(*sym as u32);
+                            break;
+                        }
+                    }
+                    RelocationRead::AbsoluteValue32(value.unwrap())
+                }
+            },
+        };
+
+        KernelRelocation {
+            write_offset: self.write_offset,
+            read_offset,
+            addend: self.addend,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct KernelData {
     pub sym_table: HashMap<String, u64>,
     pub writes: Vec<KernelBytes>,
     pub bin: KernelBinData,
-    pub relocations: Vec<KernelRelocation>,
+    pub relocations: Vec<ElfRelocation>,
 }
 
 impl<S: AsRef<str>> std::ops::Index<S> for KernelData {
@@ -348,7 +392,7 @@ impl KernelData {
         }
 
         for relocation in &self.relocations {
-            relocation.relocate(
+            relocation.to_kernel_relocation(&[]).relocate(
                 chip,
                 0,
                 |chip, addr| chip.noc_read32(noc_id, tile, addr as u64),
@@ -390,7 +434,7 @@ impl KernelData {
         }
 
         for relocation in &self.relocations {
-            relocation.relocate(
+            relocation.to_kernel_relocation(&[]).relocate(
                 chip,
                 0,
                 |chip, addr| chip.noc_read32(noc_id, chip.tensix(0), addr as u64),

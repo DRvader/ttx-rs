@@ -37,8 +37,7 @@ fn dynamic_load_push() {
 
         let mut chip = chip.unwrap();
 
-        let firmware =
-            load_push_firmware(&mut chip, PushFirmwareParameters { use_defmt: false });
+        let firmware = load_push_firmware(&mut chip, PushFirmwareParameters { use_defmt: false });
 
         let builder = workload::WorkloadBuilder {
             available_space: firmware.available_space(),
@@ -89,6 +88,10 @@ fn dynamic_load_dram_pull() {
 
         let mut chip = chip.unwrap();
 
+        if !chip.arch().is_blackhole() {
+            continue;
+        }
+
         let paramters = DramPullFirmwareParameters { use_defmt: false };
         let mut firmware = load_dram_pull_firmware(&mut chip, paramters);
 
@@ -97,7 +100,7 @@ fn dynamic_load_dram_pull() {
             ..Default::default()
         };
 
-        let buffer = builder.output_buffer("SYNC", 4, 1);
+        let buffer = builder.output_buffer("SYNC", 7, 1);
         let slot = buffer.get_slot(0).unwrap();
 
         builder.brisc = format!(
@@ -106,15 +109,13 @@ fn dynamic_load_dram_pull() {
             make_buffers_valid();
 
             // Blocks until flushed
-            buffer_push(smallest_read_for_{smallest_function}, &{sync_data}, &{sync_write}, &0xfacau32.to_le_bytes());
-            {sync_write}.write(4);
+            let to_write: [u8; 4] = 0xfacau32.to_le_bytes();
+            {sync_buffer}.push_all(&to_write);
+
             // Blocks until buffer is flushed
-            buffer_complete(smallest_read_for_{smallest_function}, &{sync_write}, &{sync_flush});
+            {sync_buffer}.flush();
             "#,
-            sync_data = slot.symbol_data(),
-            sync_write = slot.symbol_write(),
-            smallest_function = slot.symbol_base(),
-            sync_flush = slot.symbol_flushed()
+            sync_buffer = slot.symbol_buffer()
         );
 
         let workload = builder.compile(chip.arch());
@@ -138,6 +139,9 @@ fn dynamic_load_dram_pull() {
         let data = workload.empty_output(&mut chip, &slot);
         let data = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
 
-        assert_eq!(data, 0xfaca, "When testing {chip}: 0x{data:x}(actual) != 0xfaca(expected)");
+        assert_eq!(
+            data, 0xfaca,
+            "When testing {chip}: 0x{data:x}(actual) != 0xfaca(expected)"
+        );
     }
 }

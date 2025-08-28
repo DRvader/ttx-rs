@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use runtime_shared::{CoreLaunchData, LaunchData, LaunchRequest, MaxSize};
+use runtime_shared::{CbConsumer, CbObserver, CoreLaunchData, LaunchData, LaunchRequest, MaxSize};
 use tempfile::TempDir;
 use ttx_rs::{
     Arch,
@@ -58,47 +58,68 @@ pub struct QueuedWorkload {
     pub outputs: Box<[OutputBuffer]>,
 }
 
+pub struct TensixCbOutput<'a> {
+    chip: &'a mut ttx_rs::Chip,
+    slot: &'a OutputSlot,
+    workload: &'a QueuedWorkload,
+}
+
+impl runtime_shared::CbObserverMut for TensixCbOutput<'_> {
+    fn get_read_mut(&mut self) -> u32 {
+        self.chip.noc_read32(
+            NocId::Noc1,
+            self.workload.tile,
+            self.workload.data(self.slot.symbol_read()),
+        )
+    }
+
+    fn get_write_mut(&mut self) -> u32 {
+        self.chip.noc_read32(
+            NocId::Noc1,
+            self.workload.tile,
+            self.workload.data(self.slot.symbol_write()),
+        )
+    }
+
+    fn get_capacity_mut(&mut self) -> u32 {
+        self.slot.size as u32
+    }
+}
+
+impl runtime_shared::CbConsumerMut for TensixCbOutput<'_> {
+    fn set_read_mut(&mut self, value: u32) {
+        self.chip.noc_write32(
+            NocId::Noc1,
+            self.workload.tile,
+            self.workload.data(self.slot.symbol_read()),
+            value,
+        )
+    }
+
+    fn get_data_mut(&mut self, offset: u32, data: &mut [u8]) {
+        self.chip.noc_read(
+            NocId::Noc1,
+            self.workload.tile,
+            self.workload.data(self.slot.symbol_data()) + offset as u64,
+            data,
+        );
+    }
+}
+
 impl QueuedWorkload {
     pub fn data(&self, name: impl AsRef<str>) -> u64 {
         self.offset + self.workload.data.sym_table[name.as_ref()]
     }
 
     pub fn pull_output(&self, chip: &mut ttx_rs::Chip, slot: &OutputSlot) -> Box<[u8]> {
-        let read = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_read()));
-        let write = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_write()));
+        let cb = TensixCbOutput {
+            chip,
+            slot,
+            workload: self,
+        };
 
-        let count_to_read = ((write as usize + slot.size) - read as usize) % slot.size;
-
-        let mut data = vec![0; count_to_read];
-
-        if count_to_read == 0 {
-            // Do nothing the queue is empty
-            return Box::new([]);
-        } else if read as usize + count_to_read > slot.size {
-            let first_read = slot.size - read as usize;
-            chip.noc_read(
-                NocId::Noc1,
-                self.tile,
-                self.data(slot.symbol_data()) + read as u64,
-                &mut data[..first_read],
-            );
-            chip.noc_read(
-                NocId::Noc1,
-                self.tile,
-                self.data(slot.symbol_data()),
-                &mut data[first_read..],
-            );
-        } else {
-            chip.noc_read(
-                NocId::Noc1,
-                self.tile,
-                self.data(slot.symbol_data()) + read as u64,
-                &mut data,
-            );
-        }
-
-        chip.noc_write32(NocId::Noc1, self.tile, self.data(slot.symbol_read()), write);
-
+        let mut data = vec![0; cb.read_size() as usize];
+        cb.pop_all(&mut data);
         data.into_boxed_slice()
     }
 
@@ -128,6 +149,13 @@ impl QueuedWorkload {
                 break;
             }
         }
+
+        let read = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_read()));
+        let write = chip.noc_read32(NocId::Noc1, self.tile, self.data(slot.symbol_write()));
+
+        tracing::warn!(
+            "Looks like we hung waiting for program completion; buffer read {read} - buffer write {write}"
+        );
 
         output.into_boxed_slice()
     }
@@ -212,6 +240,8 @@ impl DramPullFirmware {
         kernel_relocations.extend((relocations.len() as u64).to_le_bytes());
 
         for reloc in relocations {
+            let reloc = reloc.to_kernel_relocation(&[&self.data.sym_table]);
+            tracing::info!("{:?}", reloc);
             kernel_relocations = postcard::to_extend(&reloc, kernel_relocations).unwrap();
         }
 

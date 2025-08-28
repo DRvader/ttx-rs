@@ -98,7 +98,9 @@ impl PushFirmware {
         let (relocations, mut workload_binary) = workload.get_binary();
 
         for relocation in relocations {
-            relocation.relocate_binary(job_location, &mut workload_binary);
+            relocation
+                .to_kernel_relocation(&[&self.data.sym_table])
+                .relocate_binary(job_location, &mut workload_binary);
         }
 
         device.noc_write(NocId::Noc1, tensix, job_location, &workload_binary);
@@ -106,8 +108,7 @@ impl PushFirmware {
         let kernel_launch_data = CLaunchData {
             brisc: CoreLaunchData {
                 entry: workload.data["brisc_kmain"] as u32,
-                // stack: Some(workload.data["___brisc_stack_top"] as u32),
-                stack: None,
+                stack: Some(workload.data["___brisc_stack_top"] as u32),
             },
             ncrisc: CoreLaunchData {
                 entry: workload.data["ncrisc_kmain"] as u32,

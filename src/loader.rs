@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use goblin::elf::{program_header, Reloc};
 use luwen_core::Arch;
-use relocate::{KernelRelocation, RelocationRead};
+use relocate::RelocationRead;
 use serde::{Deserialize, Serialize};
 use tensix_builder::{CacheEnable, Rewrite};
 
@@ -11,7 +11,9 @@ use crate::{
         noc::{NocAddress, NocId, NocInterface, Tile},
         Chip,
     },
-    kernel::{Alignment16, CoreData, Kernel, KernelBinData, KernelBytes, KernelData},
+    kernel::{
+        Alignment16, CoreData, ElfRelocation, Kernel, KernelBinData, KernelBytes, KernelData,
+    },
 };
 
 const BRISC_SOFT_RESET: u32 = 1 << 11;
@@ -150,18 +152,35 @@ fn load_elf(elf: &[u8]) -> KernelData {
         match reloc.r_type {
             // Runtime relocation: word32,64 = B + A
             goblin::elf::reloc::R_RISCV_RELATIVE => {
-                relocations.push(KernelRelocation {
+                relocations.push(ElfRelocation {
                     write_offset: reloc.r_offset,
-                    read_offset: RelocationRead::Base32,
+                    read_offset: crate::kernel::DynamicRelocation::Kernel(RelocationRead::Base32),
                     addend: reloc.r_addend.unwrap_or(0),
                 });
             }
             // Runtime relocation: word32 = S + A
             goblin::elf::reloc::R_RISCV_32 => {
-                relocations.push(KernelRelocation {
+                relocations.push(ElfRelocation {
                     write_offset: reloc.r_offset,
-                    read_offset: RelocationRead::SymbolValue32(
-                        bin.dynsyms.get(reloc.r_sym).unwrap().st_value as u32,
+                    read_offset: crate::kernel::DynamicRelocation::Kernel(
+                        RelocationRead::SymbolValue32(
+                            bin.dynsyms.get(reloc.r_sym).unwrap().st_value as u32,
+                        ),
+                    ),
+                    addend: reloc.r_addend.unwrap_or(0),
+                });
+            }
+            // Jump Slot: word32 = S
+            goblin::elf::reloc::R_RISCV_JUMP_SLOT => {
+                relocations.push(ElfRelocation {
+                    write_offset: reloc.r_offset,
+                    read_offset: crate::kernel::DynamicRelocation::Elf(
+                        crate::kernel::DynamicRelocationRead::Symbol32(
+                            bin.dynstrtab
+                                .get_at(bin.dynsyms.get(reloc.r_sym).unwrap().st_name)
+                                .unwrap()
+                                .to_string(),
+                        ),
                     ),
                     addend: reloc.r_addend.unwrap_or(0),
                 });

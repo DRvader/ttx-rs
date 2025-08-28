@@ -87,7 +87,8 @@ pub fn allocate_tlb(
     device: &mut PciDevice,
     start_small: bool,
 ) -> Result<PossibleTlbAllocation, PciError> {
-    if device.driver_version > 1 {
+    // The allocation API is not available pre driver version 2 and for GS
+    if device.driver_version > 1 && !device.arch.is_grayskull() {
         let tlb_info = get_tlb_info(device);
         let mut sizes = std::collections::HashSet::new();
         for config in tlb_info.tlb_config {
@@ -100,8 +101,13 @@ pub fn allocate_tlb(
         }
 
         for size in sizes {
-            if let Ok(tlb) = device.allocate_tlb(size) {
-                return Ok(PossibleTlbAllocation::Allocation(tlb));
+            match device.allocate_tlb(size) {
+                Ok(tlb) => {
+                    return Ok(PossibleTlbAllocation::Allocation(tlb));
+                }
+                Err(err) => {
+                    tracing::warn!("While allocating tlb of size {size:x} hit '{err}'");
+                }
             }
         }
 

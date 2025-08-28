@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
-use relocate::KernelRelocation;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
-use ttx_rs::{Arch, kernel::KernelData, loader::LoadOptions, tensix_builder::Rewrite};
+use ttx_rs::{
+    Arch,
+    kernel::{ElfRelocation, KernelData},
+    loader::LoadOptions,
+    tensix_builder::Rewrite,
+};
 
 use super::firmware::build_kernel_cached;
 
@@ -23,6 +27,10 @@ pub struct OutputSlot {
 impl OutputSlot {
     pub fn symbol_base(&self) -> String {
         format!("_BUFFER_{}", self.name)
+    }
+
+    pub fn symbol_buffer(&self) -> String {
+        self.symbol_base()
     }
 
     fn slot_symbol_base(&self) -> String {
@@ -47,10 +55,6 @@ impl OutputSlot {
 }
 
 impl OutputBuffer {
-    pub fn output_count(&self) -> String {
-        format!("_COMPLETION_COUNT_{}", self.name)
-    }
-
     pub fn output_buffer(&self) -> String {
         self.name.clone()
     }
@@ -103,7 +107,7 @@ impl WorkloadBuilder {
         name: impl AsRef<str>,
         size: usize,
         // The number of nodes waiting on the completion
-        completion_slots: usize,
+        read_slots: usize,
     ) -> OutputBuffer {
         // To add empty full detection we need to burn a slot
         let size = size + 1;
@@ -111,15 +115,14 @@ impl WorkloadBuilder {
 
         let buffer_name = format!("_BUFFER_{name}");
 
-        let mut smallest_read = String::new();
-        smallest_read.push_str(&format!(
-            "#[allow(non_snake_case)]\nfn smallest_read_for_{buffer_name}(write: u32) -> u32 {{"
-        ));
-        if completion_slots == 0 {
-            smallest_read.push_str("0\n}");
-        }
+        let mut buffer_impl = format!(
+            r#"
+            static {buffer_name}: TensixOutputBuffer<{read_slots}, {size}> = TensixOutputBuffer {{
+                read: [
+            "#
+        );
 
-        for i in 0..completion_slots {
+        for i in 0..read_slots {
             let name = format!("{buffer_name}_SLOT_{i}_READ_INDEX");
             self.global.push_str(&format!(
                 r#"
@@ -128,34 +131,10 @@ impl WorkloadBuilder {
             "#
             ));
 
-            if completion_slots == 1 {
-                smallest_read.push_str(&format!("{name}.read()\n}}"));
-            } else if i == 0 {
-                smallest_read.push_str(&format!(
-                    r#"
-                    let mut max_read = {name}.read();
-                    let mut max_count = buffer_count(write, max_read, {size});
-                    "#
-                ));
-            } else {
-                smallest_read.push_str(&format!(
-                    r#"
-                let new_max_read = {name}.read();
-                let new_max_count = buffer_count(write, new_max_read, {size});
-                if new_max_count > max_count {{
-                    max_read = new_max_read;
-                    max_count = new_max_count;
-                }}
-                "#
-                ));
-            }
+            buffer_impl.push_str(&format!("&{name},\n"));
         }
 
-        if completion_slots > 1 {
-            smallest_read.push_str("max_read\n}");
-        }
-
-        self.global.push_str(&smallest_read);
+        buffer_impl.push_str("],\n");
 
         {
             let name = format!("{buffer_name}_FLUSHED");
@@ -165,6 +144,8 @@ impl WorkloadBuilder {
             static {name}: SYNC<u32> = SYNC::new(false as u8 as u32);
           "#
             ));
+
+            buffer_impl.push_str(&format!("flushed: &{name},\n"));
         }
 
         {
@@ -175,6 +156,8 @@ impl WorkloadBuilder {
             static {name}: SYNC<u32> = SYNC::new(0);
           "#
             ));
+
+            buffer_impl.push_str(&format!("write: &{name},\n"));
         }
 
         {
@@ -185,12 +168,18 @@ impl WorkloadBuilder {
             static {name}: SYNC<[u8; {size}]> = SYNC::new([0; {size}]);
           "#
             ));
+
+            buffer_impl.push_str(&format!("data: &{name},\n"));
         }
+
+        buffer_impl.push_str("};\n");
+
+        self.global.push_str(&buffer_impl);
 
         OutputBuffer {
             name: name.to_string(),
             size,
-            count: completion_slots,
+            count: read_slots,
         }
     }
 
@@ -281,6 +270,11 @@ impl Workload {
 
 impl Workload {
     fn write_cargo_toml() -> String {
+        let path = env!("CARGO_MANIFEST_DIR")
+            .parse::<std::path::PathBuf>()
+            .unwrap();
+        let shared_path = path.parent().unwrap().join("runtime-shared");
+
         format!(
             r#"
         [package]
@@ -296,8 +290,10 @@ impl Workload {
 
         [dependencies]
         tensix-std = {{path = "{}/../../../tensix-std"}}
+        runtime-shared = {{path = "{}"}}
         "#,
             env!("CARGO_MANIFEST_DIR"),
+            shared_path.display(),
         )
     }
 
@@ -308,6 +304,8 @@ impl Workload {
                 r#"
         #![no_std]
         #![no_main]
+
+        use runtime_shared::{{CbObserver, CbProducer}};
 
         #[repr(align(64))]
         struct NocAlignment<T, const N: usize>(pub [T; N]);
@@ -469,50 +467,61 @@ impl Workload {
         }}
 
         #[allow(unused)]
-        fn buffer_count(write: u32, read: u32, size: u32) -> u32 {{
-            if write >= read {{
-                write - read
-            }} else {{
-                size - read + write
+        struct TensixOutputBuffer<const READ_COUNT: usize, const DATA_SIZE: usize> {{
+            write: &'static SYNC<u32>,
+            read: [&'static SYNC<u32>; READ_COUNT],
+            flushed: &'static SYNC<u32>,
+            data: &'static SYNC<[u8; DATA_SIZE]>,
+        }}
+
+        impl<const READ_COUNT: usize, const DATA_SIZE: usize> CbObserver for TensixOutputBuffer<READ_COUNT, DATA_SIZE> {{
+            fn get_write(&self) -> u32 {{
+                self.write.read()
+            }}
+
+            fn get_read(&self) -> u32 {{
+                let write = self.get_write();
+                let mut it = self.read.iter().map(|v| v.read()).map(|v| (v, Self::size(v, write, DATA_SIZE as u32)));
+
+                let (mut max_read, mut max_count) = it.next().unwrap_or((0, 0));
+                for (read, count) in it {{
+                    if count > max_count {{
+                        max_read = read;
+                        max_count = count;
+                    }}
+                }}
+
+                max_read
+            }}
+
+            fn get_capacity(&self) -> u32 {{
+                DATA_SIZE as u32
             }}
         }}
 
-        #[allow(unused)]
-        fn buffer_pull(remote: Tile, data: u32, read: u32, write: u32, size: u32, value: &mut [u8]) {{
-        }}
+        impl<const READ_COUNT: usize, const DATA_SIZE: usize> CbProducer for TensixOutputBuffer<READ_COUNT, DATA_SIZE> {{
+            fn set_write(&self, value: u32) {{
+                self.write.write(value);
+            }}
 
-        #[allow(unused)]
-        fn buffer_push_dyn(smallest_read: fn(u32) -> u32, data: *mut u8, size: u32, write: &SYNC<u32>, value: &[u8]) {{
-            unsafe {{
-                for v in value {{
-                    let write_value = write.read();
-
-                    // Wait while buffer is full
-                    while smallest_read(write_value) == (write_value + 1) % size {{ }}
-
-                    data.add(write_value as usize).write_volatile(*v);
-
-                    write.write((write_value + 1) % size);
+            fn set_data(&self, offset: u32, value: &[u8]) {{
+                unsafe {{
+                    (&mut (*self.data.get()))[offset as usize..][..value.len()].copy_from_slice(value);
                 }}
             }}
         }}
 
-        #[allow(unused)]
-        fn buffer_push<const SIZE: usize>(smallest_read: fn(u32) -> u32, data: &SYNC<[u8; SIZE]>, write: &SYNC<u32>, value: &[u8]) {{
-            unsafe {{
-                buffer_push_dyn(smallest_read, &raw mut ((*data.get())[0]), SIZE as u32, write, value)
-            }}
-        }}
+        impl<const READ_COUNT: usize, const DATA_SIZE: usize> TensixOutputBuffer<READ_COUNT, DATA_SIZE> {{
+            #[allow(unused)]
+            fn flush(&self) {{
+                unsafe {{
+                    self.flushed.write(true as u8 as u32);
 
-        #[allow(unused)]
-        fn buffer_complete(smallest_read: fn(u32) -> u32, write: &SYNC<u32>, flushed: &SYNC<u32>) {{
-            unsafe {{
-                flushed.write(true as u8 as u32);
+                    let write = self.get_write();
 
-                let write = write.read();
-
-                // Wait for buffer to be empty
-                while write != smallest_read(write) {{}}
+                    // Wait for buffer to be empty
+                    while !Self::empty(self.get_read(), write) {{}}
+                }}
             }}
         }}
 
@@ -604,7 +613,7 @@ impl Workload {
         }
     }
 
-    pub fn get_binary(&self) -> (Box<[KernelRelocation]>, Box<[u8]>) {
+    pub fn get_binary(&self) -> (Box<[ElfRelocation]>, Box<[u8]>) {
         let mut kernel_binary = Vec::new();
         for write in &self.data.writes {
             // u32
