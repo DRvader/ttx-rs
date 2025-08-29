@@ -29,7 +29,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 ctor = "0.4.2"
 
 [workspace]
-members = ["relocate", "runtime/runtime-executor", "runtime/runtime-shared"]
+members = [ "app/simulator","relocate", "runtime/runtime-executor", "runtime/runtime-shared"]
 
 [workspace.dependencies]
 postcard = { version = "1.1.1", features = [
