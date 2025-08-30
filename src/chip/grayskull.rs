@@ -54,8 +54,13 @@ impl Grayskull {
     }
 
     fn get_harvesting_mask(&mut self) -> Result<u32, ArcMsgError> {
-        self.send_arc_msg(arc::ArcMsg::GetHarvesting)
-            .map(|v| v.arg())
+        let harvest_info = self.send_arc_msg(arc::ArcMsg::GetHarvesting)
+            .map(|v| v.arg())?;
+
+        let memory = harvest_info & 0x3ff;
+        let logic = (harvest_info >> 10) & 0x3ff;
+
+        Ok(memory | logic)
     }
 }
 

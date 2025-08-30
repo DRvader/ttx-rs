@@ -17,7 +17,7 @@ const PCI_LOCATION: (u8, u8) = (0, 4);
 const GRID_SIZE_X: u8 = 13;
 const GRID_SIZE_Y: u8 = 12;
 const _NUM_TENSIX_X: u8 = GRID_SIZE_X - 1;
-const _NUM_TENSIX_Y: u8 = GRID_SIZE_Y - 2;
+const NUM_TENSIX_Y: u8 = GRID_SIZE_Y - 2;
 
 const _PHYS_X_TO_NOC_0_X: &[u8] = &[0, 12, 1, 11, 2, 10, 3, 9, 4, 8, 5, 7, 6];
 const PHYS_Y_TO_NOC_0_Y: &[u8] = &[0, 11, 1, 10, 2, 9, 3, 8, 4, 7, 5, 6];
@@ -43,13 +43,12 @@ fn coord_flip(x: u8, y: u8) -> NocAddress {
 }
 
 pub fn get_grid(harvest: u32) -> NocGrid {
-    let mut bad_rows = harvest << 1;
     let mut disabled_rows = HashSet::new();
-    for y in 0..32 {
-        if bad_rows & 1 == 1 {
-            disabled_rows.insert(PHYS_Y_TO_NOC_0_Y[(GRID_SIZE_Y - y - 1) as usize]);
+    for y in 0..NUM_TENSIX_Y {
+        let bad_row = harvest & (1 << (NUM_TENSIX_Y - y - 1)) != 0;
+        if bad_row {
+            disabled_rows.insert(PHYS_Y_TO_NOC_0_Y[y as usize + 1]);
         }
-        bad_rows >>= 1;
     }
 
     let good_rows = HashSet::from_iter([1, 2, 3, 4, 5, 7, 8, 9, 10, 11])
