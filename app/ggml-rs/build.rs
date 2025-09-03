@@ -2,7 +2,8 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    let path = env!("GGML_PATH");
+    println!("{:?}", std::env::current_dir());
+    let path = env::var("GGML_PATH").unwrap_or("./ggml/".to_string());
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     let bindings = bindgen::Builder::default()

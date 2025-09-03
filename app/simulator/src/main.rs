@@ -244,18 +244,18 @@ fn main() {
                 push_result.push_str(&format!("{} = !old_result_{}\n", local.lut_id, id));
             }
 
-            postamble.push_str(&format!(
-                r#"
-                {{
-                    let changed = compute(old_result_{id}, {}, {}, {state:?});
-                    old_result_{id} ^= changed;
-                    if changed {{
-                        {}
-                    }}
-                }}
-               "#,
-                lut.a, lut.b, lut.state, push_result
-            ));
+            // postamble.push_str(&format!(
+            //     r#"
+            //     {{
+            //         let changed = compute(old_result_{id}, {}, {}, {state:?});
+            //         old_result_{id} ^= changed;
+            //         if changed {{
+            //             {}
+            //         }}
+            //     }}
+            //    "#,
+            //     lut.a, lut.b, lut.state, push_result
+            // ));
         }
     }
 }
