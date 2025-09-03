@@ -1011,6 +1011,10 @@ fn auto_alloc_dma_write_test() {
         let mut dma = chip.alloc_dma_aligned(1024, 16);
         dma.fill(0xa5);
 
+        for tile in 0..chip.tensix_count() {
+            println!("{:?}", chip.tensix(tile));
+        }
+
         let mut kernel = rust_test! {
             nowait,
             chip,

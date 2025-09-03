@@ -478,6 +478,7 @@ fn pci_to_dram_32() {
         let mut chip = if let Ok(chip) = chip::open(id) {
             chip
         } else {
+            tracing::warn!("Wanted to run on chip {id} but failed to open");
             continue;
         };
 

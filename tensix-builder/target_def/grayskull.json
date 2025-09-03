@@ -11,7 +11,7 @@
         "std": false
     },
 
-    "target-pointer-width": "32",
+    "target-pointer-width": 32,
     "data-layout": "e-m:e-p:32:32-i64:64-n32-S128",
 
     "linker": "rust-lld",

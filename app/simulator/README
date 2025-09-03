@@ -1,0 +1,11 @@
+```bash
+module top(input a, input b, output y);
+    assign y = a & b;
+endmodule
+```
+
+```bash
+git clone https://github.com/SmallHanley/single-cycle-riscv-cpu.git
+cd single-cycle-riscv-cpu
+docker run --rm -v $(pwd):/app -w /app hdlc/yosys yosys -p "read_verilog top.v; synth; opt; fsm; opt; memory; opt; abc -lut 2 -dress; write_json design.json"
+```
