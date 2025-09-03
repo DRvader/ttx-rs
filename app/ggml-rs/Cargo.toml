@@ -1,0 +1,17 @@
+[package]
+name = "ggml"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ttx-rs = {path = "../.."}
+runtime-executor = {path = "../../runtime/runtime-executor"}
+
+tracing = {workspace = true}
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
+[build-dependencies]
+bindgen = "0.71.1"
