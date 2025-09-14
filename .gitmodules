@@ -1,3 +1,6 @@
 [submodule "kernels/doom/doomgeneric"]
 	path = kernels/doom/doomgeneric
 	url = https://github.com/ozkl/doomgeneric.git
+[submodule "app/ggml-rs/ggml"]
+	path = app/ggml-rs/ggml
+	url = git@github.com:DRvader/ggml.git

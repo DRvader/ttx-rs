@@ -1,230 +1,149 @@
-use super::{
-    field::{read_field, write_field_vec, Field},
-    Chip,
-};
+use noc_endpoints::Endpoints;
+use pci_noc::PciNoc;
+use telemetry::{Telemetry, TelemetryData, TelemetryError};
+use ttkmd_if::{tlb::Ordering, PciDevice, PciError};
 
-mod telemetry_tags;
+use super::noc::{NocAddress, NocInterface};
+
+pub mod arc;
+mod noc_endpoints;
+mod pci_noc;
+mod telemetry;
+
+pub struct Blackhole {
+    pub interface: PciNoc,
+
+    pub endpoints: Endpoints,
+
+    pub telemetry: Telemetry,
+    pub telemetry_cache: Option<TelemetryData>,
+}
 
 #[derive(Debug, thiserror::Error)]
-pub enum MessageError {
-    #[error("Timed out in {phase} after {}s", .timeout.as_secs_f32())]
-    Timeout {
-        phase: String,
-        timeout: std::time::Duration,
-    },
-    #[error("Selected out of range queue ({index} > {queue_count})")]
-    QueueIndexOutOfRange { index: u32, queue_count: u32 },
+pub enum BlackholeError {
+    #[error(transparent)]
+    PciError(#[from] PciError),
 
     #[error(transparent)]
-    AxiError(#[from] luwen::ttkmd_if::PciError),
+    TelemetryError(#[from] TelemetryError),
 }
 
-#[derive(Clone)]
-pub struct MessageQueue<const N: usize> {
-    pub header_size: u32,
-    pub entry_size: u32,
+impl Blackhole {
+    pub fn init(mut device: PciDevice) -> Result<Self, BlackholeError> {
+        let tlb_index = super::noc::allocate_tlb(&mut device, false)?;
 
-    pub queue_base: u64,
-    pub queue_count: u32,
+        let mut noc = PciNoc {
+            device,
+            tlb: tlb_index,
+        };
+        let endpoints = Endpoints::default();
 
-    pub queue_size: u32,
+        let mut bh = Blackhole {
+            telemetry: Telemetry::new(&mut noc, endpoints.arc.into())?,
+            interface: noc,
+            endpoints,
+            telemetry_cache: None,
+        };
 
-    pub fw_int: Field,
-}
+        bh.endpoints = Endpoints::new(&mut bh)?;
 
-fn arc_read32(chip: &Chip, addr: u64) -> Result<u32, luwen::ttkmd_if::PciError> {
-    chip.noc_read32(0, 10, 0, addr)
-}
-
-fn arc_write32(chip: &Chip, addr: u64, value: u32) -> Result<(), luwen::ttkmd_if::PciError> {
-    chip.noc_write32(0, 10, 0, addr, value)
-}
-
-impl<const N: usize> MessageQueue<N> {
-    fn get_base(&self, index: u8) -> u64 {
-        let msg_queue_size = 2 * self.queue_size * (self.entry_size * 4) + (self.header_size * 4);
-        self.queue_base + (index as u64 * msg_queue_size as u64)
+        Ok(bh)
     }
 
-    fn qread32(&self, chip: &Chip, index: u8, offset: u32) -> Result<u32, MessageError> {
-        Ok(arc_read32(
-            chip,
-            self.get_base(index) + (4 * offset as u64),
-        )?)
+    pub fn get_telemetry_unchanged(&mut self) -> Result<&TelemetryData, PciError> {
+        if self.telemetry_cache.is_none() {
+            let temp = Some(
+                self.telemetry
+                    .read(&mut self.interface, self.endpoints.arc.into())?,
+            );
+            self.telemetry_cache = temp;
+        }
+        // Safety: Already confirmed it to be Some above
+        unsafe { Ok(self.telemetry_cache.as_ref().unwrap_unchecked()) }
     }
 
-    fn qwrite32(
-        &self,
-        chip: &Chip,
-        index: u8,
-        offset: u32,
+    pub fn send_arc_msg(
+        &mut self,
+        msg_id: u32,
+        data: Option<[u32; 7]>,
+    ) -> Result<(u8, u16, [u32; 7]), arc::MessageError> {
+        arc::send_arc_msg(self, msg_id, data)
+    }
+}
+
+impl NocInterface for Blackhole {
+    fn noc_read<T: Into<NocAddress>>(
+        &mut self,
+        noc_id: super::noc::NocId,
+        tile: T,
+        addr: u64,
+        data: &mut [u8],
+    ) {
+        self.interface
+            .tile_read(noc_id, tile.into(), addr, data)
+            .unwrap()
+    }
+
+    fn noc_read32<T: Into<NocAddress>>(
+        &mut self,
+        noc_id: super::noc::NocId,
+        tile: T,
+        addr: u64,
+    ) -> u32 {
+        self.interface
+            .tile_read32(noc_id, tile.into(), addr)
+            .unwrap()
+    }
+
+    fn noc_write<T: Into<NocAddress>>(
+        &mut self,
+        noc_id: super::noc::NocId,
+        tile: T,
+        addr: u64,
+        data: &[u8],
+    ) {
+        self.interface
+            .tile_write(noc_id, tile.into(), addr, data)
+            .unwrap()
+    }
+
+    fn noc_write32<T: Into<NocAddress>>(
+        &mut self,
+        noc_id: super::noc::NocId,
+        tile: T,
+        addr: u64,
         value: u32,
-    ) -> Result<(), MessageError> {
-        Ok(arc_write32(
-            chip,
-            self.get_base(index) + (4 * offset as u64),
-            value,
-        )?)
+    ) {
+        self.interface
+            .tile_write32(noc_id, tile.into(), addr, value)
+            .unwrap()
     }
 
-    fn trigger_int(&self, chip: &Chip) -> Result<bool, MessageError> {
-        let mut mvalue = vec![0u8; self.fw_int.size as usize];
-        let value = read_field(
-            chip,
-            |chip, addr, data| chip.device.read_block_no_dma(addr as u32, data).unwrap(),
-            self.fw_int,
-            &mut mvalue,
+    fn noc_broadcast(&mut self, noc_id: super::noc::NocId, addr: u64, data: &[u8]) {
+        super::noc::noc_multicast(
+            &mut self.interface.device,
+            &self.interface.tlb,
+            Ordering::STRICT,
+            noc_id,
+            self.endpoints.tensix_broadcast[noc_id as u8 as usize].0,
+            self.endpoints.tensix_broadcast[noc_id as u8 as usize].1,
+            addr,
+            data,
         )
-        .unwrap();
-
-        if value[0] & 1 != 0 {
-            return Ok(false);
-        }
-
-        mvalue[0] |= 1;
-
-        write_field_vec(
-            &chip,
-            |chip, addr, data| chip.device.read_block_no_dma(addr as u32, data).unwrap(),
-            |chip, addr, data| chip.device.write_block_no_dma(addr as u32, data).unwrap(),
-            self.fw_int,
-            mvalue.as_slice(),
-        );
-
-        Ok(true)
+        .unwrap()
     }
 
-    fn push_request(
-        &self,
-        chip: &Chip,
-        index: u8,
-        request: &[u32; N],
-        timeout: std::time::Duration,
-    ) -> Result<(), MessageError> {
-        let request_queue_wptr = self.qread32(chip, index, 0)?;
-
-        let start_time = std::time::Instant::now();
-        loop {
-            let request_queue_rptr = self.qread32(chip, index, 4)?;
-
-            // Check if the queue is full
-            if request_queue_rptr.abs_diff(request_queue_wptr) % (2 * self.queue_size)
-                != self.queue_size
-            {
-                break;
-            }
-
-            let elapsed = start_time.elapsed();
-            if elapsed > timeout {
-                return Err(MessageError::Timeout {
-                    phase: "push".to_string(),
-                    timeout: elapsed,
-                })?;
-            }
-        }
-
-        let request_entry_offset =
-            self.header_size + (request_queue_wptr % self.queue_size) * N as u32;
-        for i in 0..request.len() {
-            self.qwrite32(chip, index, request_entry_offset + i as u32, request[i])?;
-        }
-
-        let request_queue_wptr = (request_queue_wptr + 1) % (2 * self.queue_size);
-        self.qwrite32(chip, index, 0, request_queue_wptr)?;
-
-        self.trigger_int(chip)?;
-
-        Ok(())
-    }
-
-    fn pop_response(
-        &self,
-        chip: &Chip,
-        index: u8,
-        result: &mut [u32; N],
-        timeout: std::time::Duration,
-    ) -> Result<(), MessageError> {
-        let response_queue_rptr = self.qread32(chip, index, 1)?;
-
-        let start_time = std::time::Instant::now();
-        loop {
-            let response_queue_wptr = self.qread32(chip, index, 5)?;
-
-            // Break if there is some data in the queue
-            if response_queue_wptr != response_queue_rptr {
-                break;
-            }
-
-            let elapsed = start_time.elapsed();
-            if elapsed > timeout {
-                return Err(MessageError::Timeout {
-                    phase: "pop".to_string(),
-                    timeout: elapsed,
-                })?;
-            }
-        }
-
-        let response_entry_offset = self.header_size
-            + (self.queue_size + (response_queue_rptr % self.queue_size)) * N as u32;
-        for i in 0..result.len() {
-            result[i] = self.qread32(chip, index, response_entry_offset + i as u32)?;
-        }
-
-        let response_queue_rptr = (response_queue_rptr + 1) % (2 * self.queue_size);
-        self.qwrite32(chip, index, 1, response_queue_rptr)?;
-
-        Ok(())
-    }
-
-    pub fn send_message(
-        &self,
-        chip: &Chip,
-        index: u8,
-        mut request: [u32; N],
-        timeout: std::time::Duration,
-    ) -> Result<[u32; N], MessageError> {
-        let mut lock = super::ARC_LOCK.lock().unwrap();
-        while lock.len() <= chip.device.id {
-            lock.push(std::sync::Mutex::new(()));
-        }
-        let _lock = lock[chip.device.id].lock();
-
-        if index as u32 > self.queue_count {
-            return Err(MessageError::QueueIndexOutOfRange {
-                index: index as u32,
-                queue_count: self.queue_count,
-            })?;
-        }
-
-        self.push_request(chip, index, &request, timeout)?;
-        self.pop_response(chip, index, &mut request, timeout)?;
-
-        return Ok(request);
-    }
-}
-
-#[derive(Debug)]
-pub struct QueueInfo {
-    pub req_rptr: u32,
-    pub req_wptr: u32,
-    pub resp_rptr: u32,
-    pub resp_wptr: u32,
-}
-
-impl<const N: usize> MessageQueue<N> {
-    pub fn get_queue_info(&self, chip: &Chip, index: u8) -> Result<QueueInfo, MessageError> {
-        if index as u32 > self.queue_count {
-            return Err(MessageError::QueueIndexOutOfRange {
-                index: index as u32,
-                queue_count: self.queue_count,
-            })?;
-        }
-
-        Ok(QueueInfo {
-            req_rptr: self.qread32(chip, index, 4)?,
-            req_wptr: self.qread32(chip, index, 0)?,
-            resp_rptr: self.qread32(chip, index, 1)?,
-            resp_wptr: self.qread32(chip, index, 5)?,
-        })
+    fn noc_broadcast32(&mut self, noc_id: super::noc::NocId, addr: u64, value: u32) {
+        super::noc::noc_multicast32(
+            &mut self.interface.device,
+            &self.interface.tlb,
+            Ordering::STRICT,
+            noc_id,
+            self.endpoints.tensix_broadcast[noc_id as u8 as usize].0,
+            self.endpoints.tensix_broadcast[noc_id as u8 as usize].1,
+            addr,
+            value,
+        )
+        .unwrap()
     }
 }
